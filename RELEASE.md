@@ -3,12 +3,18 @@
 Two-repo model: **source stays private, only the built app is public.**
 
 ```
-PRIVATE repo  (this one)            PUBLIC repo  (users install from here)
+PRIVATE repo: naeasy-dev            PUBLIC repo: naeasy
+(~/workspace/personal/naeasy-dev)   (~/workspace/personal/naeasy)
 ─────────────────────────          ─────────────────────────────────────
-full source, dev history           dist/naeasy-macos-<version>.zip
-build outputs are .gitignored       install.sh   (idempotent installer)
+full source, dev history           bin/naeasy-macos-<version>.zip (all versions)
+build outputs are .gitignored       install.sh   (idempotent, picks newest zip)
 release.sh produces ./dist  ──────▶ README.md
 ```
+
+`release.sh` publishes automatically: if a checkout of the public repo exists
+next to this one (`../naeasy`, override with `PUBLIC_DIR=...`), it copies the
+new zip into `bin/`, refreshes `install.sh` and **commits** there — you only
+`git push` it.
 
 Source is never published; users only ever see a prebuilt, zipped `.app` plus a
 one-command installer.
@@ -28,13 +34,23 @@ one-command installer.
 
 `dist/` is git-ignored here (private repo stays source-only).
 
-## Publish (pick one)
+## Publish
 
-- **Public repo:** copy `dist/*` into the public repo, commit, push. Users:
-  ```bash
-  git clone <public-repo> && cd <public-repo> && ./install.sh
-  ```
-- **GitHub release:** `gh release create v<version> dist/naeasy-macos-<version>.zip dist/install.sh`
+With `../naeasy` checked out, `./release.sh` already committed the new version
+there — just push:
+
+```bash
+git -C ../naeasy push
+```
+
+Users:
+```bash
+git clone <public-repo> naeasy && cd naeasy && ./install.sh
+```
+
+Fallback (no local public checkout): copy `dist/naeasy-macos-<version>.zip` →
+`<public>/bin/`, `dist/install.sh` → `<public>/install.sh`, commit & push; or
+`gh release create v<version> dist/naeasy-macos-<version>.zip dist/install.sh`.
 
 ## Install / upgrade (users)
 

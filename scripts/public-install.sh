@@ -14,9 +14,10 @@ if [ "$(uname)" != "Darwin" ]; then
   exit 1
 fi
 
-ZIP=$(ls naeasy-macos-*.zip 2>/dev/null | sort -V | tail -1)
+# Newest version wins; zips live in bin/ (fallback: next to this script).
+ZIP=$(ls bin/naeasy-macos-*.zip naeasy-macos-*.zip 2>/dev/null | sort -V | tail -1)
 if [ -z "${ZIP:-}" ]; then
-  echo "${RED}No naeasy-macos-*.zip found next to this script.${RESET}" >&2
+  echo "${RED}No naeasy-macos-*.zip found in bin/ or next to this script.${RESET}" >&2
   exit 1
 fi
 echo "${BOLD}naeasy — installing from ${ZIP}${RESET}"

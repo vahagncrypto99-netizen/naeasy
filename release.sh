@@ -52,7 +52,29 @@ EOF
 echo
 echo "${GREEN}✓ dist/ ready:${RESET}"
 ls -1 dist
-echo
-echo "Publish (pick one):"
-echo "  • Public repo:  copy dist/* into your public repo, commit & push"
-echo "  • GitHub release:  gh release create v$VERSION dist/naeasy-macos-$VERSION.zip dist/install.sh"
+
+# Publish into the local checkout of the PUBLIC binary repo (bin/ layout).
+# Old versions are kept — each release just adds a new zip to bin/.
+# Guard against pointing at this (dev) repo itself.
+PUBLIC_DIR="${PUBLIC_DIR:-$(dirname "$PWD")/naeasy}"
+if [ -d "$PUBLIC_DIR/.git" ] && [ "$(cd "$PUBLIC_DIR" && pwd)" != "$PWD" ]; then
+  echo
+  echo "▸ Publishing v$VERSION into $PUBLIC_DIR"
+  mkdir -p "$PUBLIC_DIR/bin"
+  cp "dist/naeasy-macos-$VERSION.zip" "$PUBLIC_DIR/bin/"
+  cp dist/install.sh "$PUBLIC_DIR/install.sh"
+  chmod +x "$PUBLIC_DIR/install.sh"
+  [ -f "$PUBLIC_DIR/README.md" ] || cp dist/README.md "$PUBLIC_DIR/README.md"
+  git -C "$PUBLIC_DIR" add bin install.sh README.md
+  if git -C "$PUBLIC_DIR" commit -m "release v$VERSION" >/dev/null; then
+    echo "${GREEN}✓ Committed in public repo.${RESET} Push it:"
+    echo "    git -C \"$PUBLIC_DIR\" push"
+  else
+    echo "Nothing new to commit in the public repo."
+  fi
+else
+  echo
+  echo "Publish (no public checkout at $PUBLIC_DIR — manual options):"
+  echo "  • Public repo:  copy dist/naeasy-macos-$VERSION.zip → <public>/bin/, dist/install.sh → <public>/, commit & push"
+  echo "  • GitHub release:  gh release create v$VERSION dist/naeasy-macos-$VERSION.zip dist/install.sh"
+fi
