@@ -23,7 +23,7 @@ for arch in $ARCHES; do
     -v "naeasy-target-$arch:/app/src-tauri/target" \
     -v "naeasy-node-$arch:/app/node_modules" \
     "naeasy-linux-build:$arch" \
-    bash -lc "npm install --no-audit --no-fund && npm run build -- --bundles deb && cp src-tauri/target/release/bundle/deb/*.deb /app/dist-linux/"
+    bash -c "npm install --no-audit --no-fund && npm run build -- --bundles deb && cp src-tauri/target/release/bundle/deb/*.deb /app/dist-linux/"
 done
 
 echo
