@@ -1,4 +1,3 @@
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
@@ -10,10 +9,12 @@ mod infra;
 use domain::models::{default_shortcut, now_secs, AppData, Config, Ide, Recent, Workspace};
 use domain::tree::build_app_data;
 use infra::config_repository::{ConfigRepository, JsonConfigRepository};
+use infra::ide_detector::{ide_name_from_path, IdeDetector};
 
 struct AppState {
     config: Mutex<Config>,
     repo: Arc<dyn ConfigRepository>,
+    detector: Arc<dyn IdeDetector>,
 }
 
 fn gen_id() -> String {
@@ -26,193 +27,6 @@ fn gen_id() -> String {
         .unwrap_or(0);
     let n = COUNTER.fetch_add(1, Ordering::Relaxed);
     format!("{:x}-{:x}", nanos, n)
-}
-
-// ------------------------- IDE detection -------------------------
-
-fn home_dir() -> Option<PathBuf> {
-    std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
-}
-
-/// Auto-detect installed IDEs (platform-specific), sorted by name.
-fn detect_installed_ides() -> Vec<Ide> {
-    let mut found = detect_platform_ides();
-    found.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
-    found
-}
-
-// ---- macOS: scan /Applications for known *.app bundles ----
-#[cfg(target_os = "macos")]
-const KNOWN_IDES: &[&str] = &[
-    "PhpStorm",
-    "GoLand",
-    "DataGrip",
-    "PyCharm",
-    "PyCharm Professional Edition",
-    "PyCharm Community Edition",
-    "IntelliJ IDEA",
-    "IntelliJ IDEA Ultimate",
-    "IntelliJ IDEA Community Edition",
-    "WebStorm",
-    "CLion",
-    "RubyMine",
-    "Rider",
-    "RustRover",
-    "Fleet",
-    "Visual Studio Code",
-    "VSCodium",
-    "Cursor",
-    "Zed",
-    "Sublime Text",
-    "Nova",
-    "Windsurf",
-];
-
-#[cfg(target_os = "macos")]
-fn scan_apps_dir(dir: &Path, found: &mut Vec<Ide>) {
-    let entries = match fs::read_dir(dir) {
-        Ok(e) => e,
-        Err(_) => return,
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) != Some("app") {
-            continue;
-        }
-        let stem = path
-            .file_stem()
-            .map(|s| s.to_string_lossy().to_string())
-            .unwrap_or_default();
-        if KNOWN_IDES.iter().any(|k| stem.eq_ignore_ascii_case(k)) {
-            let path_str = path.to_string_lossy().to_string();
-            if !found.iter().any(|i| i.path == path_str) {
-                found.push(Ide {
-                    id: gen_id(),
-                    name: stem,
-                    path: path_str,
-                });
-            }
-        }
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn detect_platform_ides() -> Vec<Ide> {
-    let mut found: Vec<Ide> = Vec::new();
-    let mut dirs: Vec<PathBuf> = vec![PathBuf::from("/Applications")];
-    if let Some(home) = home_dir() {
-        dirs.push(home.join("Applications"));
-        dirs.push(home.join("Applications/JetBrains Toolbox"));
-    }
-    for dir in dirs {
-        scan_apps_dir(&dir, &mut found);
-    }
-    found
-}
-
-/// command name -> display name (Linux PATH / Toolbox scripts).
-#[cfg(target_os = "linux")]
-const LINUX_CMDS: &[(&str, &str)] = &[
-    ("phpstorm", "PhpStorm"),
-    ("goland", "GoLand"),
-    ("datagrip", "DataGrip"),
-    ("pycharm", "PyCharm"),
-    ("idea", "IntelliJ IDEA"),
-    ("webstorm", "WebStorm"),
-    ("clion", "CLion"),
-    ("rubymine", "RubyMine"),
-    ("rider", "Rider"),
-    ("rustrover", "RustRover"),
-    ("code", "VS Code"),
-    ("codium", "VSCodium"),
-    ("cursor", "Cursor"),
-    ("zed", "Zed"),
-    ("subl", "Sublime Text"),
-];
-
-// ---- Linux: search PATH + JetBrains Toolbox scripts ----
-#[cfg(target_os = "linux")]
-fn detect_platform_ides() -> Vec<Ide> {
-    let mut found: Vec<Ide> = Vec::new();
-
-    let path_var = std::env::var("PATH").unwrap_or_default();
-    let path_dirs: Vec<PathBuf> = std::env::split_paths(&path_var).collect();
-    for (cmd, name) in LINUX_CMDS {
-        for dir in &path_dirs {
-            let p = dir.join(cmd);
-            if p.is_file() {
-                let path_str = p.to_string_lossy().to_string();
-                if !found.iter().any(|i| i.path == path_str) {
-                    found.push(Ide {
-                        id: gen_id(),
-                        name: name.to_string(),
-                        path: path_str,
-                    });
-                }
-                break;
-            }
-        }
-    }
-
-    if let Some(home) = home_dir() {
-        let scripts = home.join(".local/share/JetBrains/Toolbox/scripts");
-        if let Ok(entries) = fs::read_dir(&scripts) {
-            for entry in entries.flatten() {
-                let p = entry.path();
-                if !p.is_file() {
-                    continue;
-                }
-                let stem = p
-                    .file_name()
-                    .map(|s| s.to_string_lossy().to_string())
-                    .unwrap_or_default();
-                if let Some((_, name)) =
-                    LINUX_CMDS.iter().find(|(c, _)| stem.eq_ignore_ascii_case(c))
-                {
-                    let path_str = p.to_string_lossy().to_string();
-                    if !found.iter().any(|i| i.path == path_str) {
-                        found.push(Ide {
-                            id: gen_id(),
-                            name: name.to_string(),
-                            path: path_str,
-                        });
-                    }
-                }
-            }
-        }
-    }
-    found
-}
-
-// ---- Windows: common install locations (rest via manual Add IDE) ----
-#[cfg(target_os = "windows")]
-fn detect_platform_ides() -> Vec<Ide> {
-    let mut found: Vec<Ide> = Vec::new();
-    if let Ok(lad) = std::env::var("LOCALAPPDATA") {
-        for (rel, name) in [
-            ("Programs\\Microsoft VS Code\\Code.exe", "VS Code"),
-            ("Programs\\cursor\\Cursor.exe", "Cursor"),
-        ] {
-            let p = PathBuf::from(&lad).join(rel);
-            if p.is_file() {
-                found.push(Ide {
-                    id: gen_id(),
-                    name: name.to_string(),
-                    path: p.to_string_lossy().to_string(),
-                });
-            }
-        }
-    }
-    found
-}
-
-fn ide_name_from_path(path: &str) -> String {
-    Path::new(path)
-        .file_stem()
-        .map(|s| s.to_string_lossy().to_string())
-        .unwrap_or_else(|| path.to_string())
 }
 
 // ------------------------- Commands -------------------------
@@ -262,7 +76,7 @@ fn remove_workspace(state: State<AppState>, id: String) -> Result<AppData, Strin
 
 #[tauri::command]
 fn detect_ides(state: State<AppState>) -> Result<AppData, String> {
-    let detected = detect_installed_ides();
+    let detected = state.detector.detect();
     let mut config = state.config.lock().unwrap();
     for ide in detected {
         if !config.ides.iter().any(|i| i.path == ide.path) {
@@ -772,6 +586,7 @@ pub fn run() {
             app.manage(AppState {
                 config: Mutex::new(config),
                 repo,
+                detector: infra::ide_detector::platform_detector(),
             });
 
             // Register the global hotkey that toggles the window.
@@ -946,15 +761,6 @@ fn position_under_tray(window: &tauri::WebviewWindow, rect: &tauri::Rect) {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn ide_name_from_path_extracts_stem() {
-        assert_eq!(ide_name_from_path("/Applications/PhpStorm.app"), "PhpStorm");
-        assert_eq!(
-            ide_name_from_path("/Users/x/Applications/GoLand.app"),
-            "GoLand"
-        );
-    }
 
     #[cfg(target_os = "macos")]
     #[test]
