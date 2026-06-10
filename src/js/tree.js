@@ -14,6 +14,7 @@ let handlers = {
   openProject: () => {},
   addWorkspace: () => {},
   removeWorkspace: () => {},
+  pickProjectIde: () => {},
 };
 
 const content = () => $("#content");
@@ -67,8 +68,10 @@ function renderNode(node, depth) {
   html += `<span class="label">${escapeHtml(node.name)}</span>`;
   if (node.is_repo) {
     html += metaHtml(node);
-    const def = ideName(store.state.default_ide_id) || "set IDE";
-    html += `<span class="badge" data-badge="${escapeAttr(node.path)}">${escapeHtml(def)}</span>`;
+    // The project's remembered IDE wins over the default one.
+    const own = ideName((store.state.project_ides || {})[node.path]);
+    const label = own || ideName(store.state.default_ide_id) || "set IDE";
+    html += `<span class="badge ${own ? "badge-own" : ""}" data-badge="${escapeAttr(node.path)}" title="IDE for this project — click to change">${escapeHtml(label)}</span>`;
   }
   html += `</div>`;
   if (hasChildren) {
@@ -177,14 +180,22 @@ function showIdePicker(anchorEl, projectPath) {
     setStatus("Add an IDE first (⚙)");
     return;
   }
-  picker.innerHTML = store.state.ides
-    .map((ide) => {
-      const isDef = ide.id === store.state.default_ide_id;
-      return `<div class="pick" data-pick-ide="${ide.id}" data-pick-path="${escapeAttr(projectPath)}">
-        <span class="dot">${isDef ? "●" : ""}</span><span>${escapeHtml(ide.name)}</span>
+  // Picking here is remembered for this project. The dot marks the current
+  // choice; "Default" clears the override and follows the global default.
+  const own = (store.state.project_ides || {})[projectPath] || "";
+  const defName = ideName(store.state.default_ide_id) || "—";
+  picker.innerHTML =
+    `<div class="pick" data-pick-ide="" data-pick-path="${escapeAttr(projectPath)}">
+      <span class="dot">${own ? "" : "●"}</span><span>Default (${escapeHtml(defName)})</span>
+    </div>` +
+    store.state.ides
+      .map((ide) => {
+        const isCur = ide.id === own;
+        return `<div class="pick" data-pick-ide="${ide.id}" data-pick-path="${escapeAttr(projectPath)}">
+        <span class="dot">${isCur ? "●" : ""}</span><span>${escapeHtml(ide.name)}</span>
       </div>`;
-    })
-    .join("");
+      })
+      .join("");
   const rect = anchorEl.getBoundingClientRect();
   picker.classList.remove("hidden");
   const pw = picker.offsetWidth;
@@ -249,7 +260,11 @@ export function initTree(h) {
   $("#ide-picker").addEventListener("click", (e) => {
     const pick = e.target.closest("[data-pick-ide]");
     if (!pick) return;
-    handlers.openProject(pick.getAttribute("data-pick-path"), pick.getAttribute("data-pick-ide"));
+    // Remember the choice for this project (empty id = back to default), then open.
+    handlers.pickProjectIde(
+      pick.getAttribute("data-pick-path"),
+      pick.getAttribute("data-pick-ide") || null
+    );
     hideIdePicker();
   });
 

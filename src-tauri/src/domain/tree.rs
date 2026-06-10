@@ -166,6 +166,8 @@ pub fn build_app_data(config: &Config) -> AppData {
         default_ide_id: config.default_ide_id.clone(),
         shortcut: config.shortcut.clone().unwrap_or_else(default_shortcut),
         recents: config.recents.clone(),
+        project_ides: config.project_ides.clone(),
+        open_in_tabs: config.open_in_tabs,
     }
 }
 

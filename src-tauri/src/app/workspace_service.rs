@@ -132,11 +132,14 @@ impl WorkspaceService {
         Ok(build_app_data(&config))
     }
 
-    /// Open a project in the chosen (or default) IDE and remember it in
-    /// "Recents". Focus-or-open is handled by the launcher.
+    /// Open a project in the chosen IDE and remember it in "Recents".
+    /// IDE resolution order: explicit `ide_id` → the project's remembered IDE
+    /// → the default IDE. Focus-or-open is handled by the launcher.
     pub fn open_project(&self, project_path: String, ide_id: Option<String>) -> Result<(), String> {
         let mut config = self.config.lock().unwrap();
-        let chosen = ide_id.or_else(|| config.default_ide_id.clone());
+        let chosen = ide_id
+            .or_else(|| config.project_ides.get(&project_path).cloned())
+            .or_else(|| config.default_ide_id.clone());
         let ide = match chosen.and_then(|id| config.ides.iter().find(|i| i.id == id).cloned()) {
             Some(ide) => ide,
             None => return Err("No IDE selected. Add an IDE first.".into()),
@@ -146,7 +149,8 @@ impl WorkspaceService {
             return Err(format!("Project not found: {project_path}"));
         }
 
-        self.launcher.open(&ide.path, &project_path)?;
+        self.launcher
+            .open(&ide.path, &project_path, config.open_in_tabs)?;
 
         // Remember when and with which IDE this project was opened.
         config.recents.insert(
@@ -166,6 +170,36 @@ impl WorkspaceService {
 
     pub fn scan_open(&self, names: &[String]) -> HashMap<String, String> {
         self.launcher.scan_open(names)
+    }
+
+    /// Remember (or clear, with `None`) the preferred IDE for one project.
+    pub fn set_project_ide(
+        &self,
+        project_path: String,
+        ide_id: Option<String>,
+    ) -> Result<AppData, String> {
+        let mut config = self.config.lock().unwrap();
+        match ide_id {
+            Some(id) => {
+                if !config.ides.iter().any(|i| i.id == id) {
+                    return Err("Unknown IDE".into());
+                }
+                config.project_ides.insert(project_path, id);
+            }
+            None => {
+                config.project_ides.remove(&project_path);
+            }
+        }
+        self.repo.save(&config)?;
+        Ok(build_app_data(&config))
+    }
+
+    /// Toggle tabs-vs-windows mode for opening projects.
+    pub fn set_open_in_tabs(&self, enabled: bool) -> Result<AppData, String> {
+        let mut config = self.config.lock().unwrap();
+        config.open_in_tabs = enabled;
+        self.repo.save(&config)?;
+        Ok(build_app_data(&config))
     }
 
     /// Persist a new shortcut accelerator (registration with the OS is the
@@ -220,7 +254,7 @@ mod tests {
     }
 
     struct FakeLauncher {
-        opened: Mutex<Vec<(String, String)>>,
+        opened: Mutex<Vec<(String, String, bool)>>,
     }
 
     impl FakeLauncher {
@@ -232,11 +266,11 @@ mod tests {
     }
 
     impl ProjectLauncher for FakeLauncher {
-        fn open(&self, app_path: &str, project_path: &str) -> Result<(), String> {
+        fn open(&self, app_path: &str, project_path: &str, in_tabs: bool) -> Result<(), String> {
             self.opened
                 .lock()
                 .unwrap()
-                .push((app_path.to_string(), project_path.to_string()));
+                .push((app_path.to_string(), project_path.to_string(), in_tabs));
             Ok(())
         }
         fn scan_open(&self, _names: &[String]) -> HashMap<String, String> {
@@ -371,5 +405,73 @@ mod tests {
         assert_eq!(data.shortcut, "Alt+Space");
         assert_eq!(repo.load().shortcut.as_deref(), Some("Alt+Space"));
         assert_eq!(service.shortcut(), "Alt+Space");
+    }
+
+    fn service_with_launcher(
+        detected: Vec<Ide>,
+    ) -> (WorkspaceService, Arc<FakeConfigRepository>, Arc<FakeLauncher>) {
+        let repo = Arc::new(FakeConfigRepository::new());
+        let launcher = Arc::new(FakeLauncher::new());
+        let service = WorkspaceService::new(
+            repo.clone(),
+            Arc::new(FakeDetector { ides: detected }),
+            launcher.clone(),
+        );
+        (service, repo, launcher)
+    }
+
+    #[test]
+    fn project_ide_overrides_default_and_clears_back() {
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path().to_string_lossy().to_string();
+        let (service, _, launcher) = service_with_launcher(vec![
+            ide("a", "PhpStorm", "/apps/PhpStorm.app"),
+            ide("b", "Zed", "/apps/Zed.app"),
+        ]);
+        service.detect_ides().unwrap(); // default = "a"
+
+        let data = service
+            .set_project_ide(project.clone(), Some("b".into()))
+            .unwrap();
+        assert_eq!(data.project_ides.get(&project).map(String::as_str), Some("b"));
+
+        service.open_project(project.clone(), None).unwrap();
+        assert_eq!(launcher.opened.lock().unwrap().last().unwrap().0, "/apps/Zed.app");
+
+        // Clearing the override falls back to the default IDE.
+        service.set_project_ide(project.clone(), None).unwrap();
+        service.open_project(project.clone(), None).unwrap();
+        assert_eq!(
+            launcher.opened.lock().unwrap().last().unwrap().0,
+            "/apps/PhpStorm.app"
+        );
+    }
+
+    #[test]
+    fn set_project_ide_rejects_unknown() {
+        let (service, _) = service_with(vec![]);
+        assert_eq!(
+            service.set_project_ide("/p".into(), Some("nope".into())).unwrap_err(),
+            "Unknown IDE"
+        );
+    }
+
+    #[test]
+    fn open_in_tabs_defaults_on_and_toggles() {
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path().to_string_lossy().to_string();
+        let (service, repo, launcher) =
+            service_with_launcher(vec![ide("a", "PhpStorm", "/apps/PhpStorm.app")]);
+        service.detect_ides().unwrap();
+
+        service.open_project(project.clone(), None).unwrap();
+        assert!(launcher.opened.lock().unwrap().last().unwrap().2, "tabs on by default");
+
+        let data = service.set_open_in_tabs(false).unwrap();
+        assert!(!data.open_in_tabs);
+        assert!(!repo.load().open_in_tabs);
+
+        service.open_project(project, None).unwrap();
+        assert!(!launcher.opened.lock().unwrap().last().unwrap().2);
     }
 }

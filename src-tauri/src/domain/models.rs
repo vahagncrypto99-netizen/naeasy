@@ -15,7 +15,7 @@ pub struct Ide {
     pub path: String,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     #[serde(default)]
     pub workspaces: Vec<Workspace>,
@@ -29,6 +29,32 @@ pub struct Config {
     /// Last-opened info per project path.
     #[serde(default)]
     pub recents: std::collections::HashMap<String, Recent>,
+    /// Preferred IDE per project path (path -> IDE id). Overrides the default
+    /// IDE for that project.
+    #[serde(default)]
+    pub project_ides: std::collections::HashMap<String, String>,
+    /// Open projects as tabs of one IDE window (merge windows) instead of a
+    /// new window per project.
+    #[serde(default = "default_true")]
+    pub open_in_tabs: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            workspaces: Vec::new(),
+            ides: Vec::new(),
+            default_ide_id: None,
+            shortcut: None,
+            recents: Default::default(),
+            project_ides: Default::default(),
+            open_in_tabs: true,
+        }
+    }
 }
 
 pub fn default_shortcut() -> String {
@@ -90,6 +116,9 @@ pub struct AppData {
     pub default_ide_id: Option<String>,
     pub shortcut: String,
     pub recents: std::collections::HashMap<String, Recent>,
+    /// Preferred IDE per project path (path -> IDE id).
+    pub project_ides: std::collections::HashMap<String, String>,
+    pub open_in_tabs: bool,
 }
 
 #[cfg(test)]

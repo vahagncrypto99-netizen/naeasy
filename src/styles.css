@@ -295,6 +295,12 @@ body {
 .row.repo:hover .badge {
   display: inline-block;
 }
+/* A project with its own remembered IDE shows the badge permanently. */
+.row .badge.badge-own {
+  display: inline-block;
+  color: var(--accent);
+  border-color: var(--accent);
+}
 .row .badge:hover {
   border-color: var(--accent);
   color: var(--text);
@@ -412,55 +418,6 @@ body {
   border-color: var(--accent);
   background: var(--bg-hover);
 }
-.ide-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.ide-item {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 10px;
-  border: 1px solid var(--line);
-  border-radius: 11px;
-  margin-bottom: 8px;
-  background: var(--bg-soft);
-}
-.ide-item .ide-name {
-  flex: 1;
-  font-weight: 500;
-}
-.ide-item .ide-path {
-  font-size: 10px;
-  color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 100%;
-}
-.ide-default {
-  font-size: 10px;
-  color: var(--accent);
-  border: 1px solid var(--accent);
-  border-radius: 7px;
-  padding: 2px 8px;
-  cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
-}
-.ide-default.is-default {
-  background: var(--accent);
-  color: var(--on-accent);
-}
-.ide-remove {
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 14px;
-}
-.ide-remove:hover {
-  color: #e0775c;
-}
-
 /* Default-IDE dropdown */
 .select-row {
   display: flex;

@@ -52,16 +52,25 @@
         <div class="select-row">
           <span class="select-label">Default</span>
           <select id="default-ide-select" class="select"></select>
+          <button id="remove-ide" class="icon-btn" title="Remove the selected IDE">✕</button>
         </div>
 
-        <ul id="ide-list" class="ide-list"></ul>
-        <p class="hint">The default IDE is used on a single click. Click the badge on a project to pick a different one.</p>
+        <p class="hint">The default IDE is used on a single click. Click the badge on a project to pick a different one. ✕ removes the IDE selected above.</p>
 
         <div class="section-row" style="margin-top:16px">
           <span class="section-label">Global shortcut</span>
           <button id="shortcut-btn" class="ghost-btn">Cmd+Shift+M</button>
         </div>
         <p class="hint">Toggles the window from anywhere. Click, then press your combo (a modifier + one key).</p>
+
+        <div class="section-row" style="margin-top:16px">
+          <span class="section-label">Projects</span>
+          <label class="switch">
+            <input type="checkbox" id="tabs-toggle" />
+            <span>Open in tabs</span>
+          </label>
+        </div>
+        <p class="hint">Keeps projects as tabs of one IDE window (JetBrains IDEs; needs Accessibility). Off — a new window per project.</p>
 
         <div class="section-row" style="margin-top:16px">
           <span class="section-label">Startup</span>

@@ -8,8 +8,10 @@ use std::sync::Arc;
 ///
 /// `open` performs focus-or-open internally: if an IDE window for the project
 /// already exists it is focused instead of launching a new instance.
+/// With `in_tabs` the launcher additionally tries (best-effort) to keep all of
+/// the IDE's project windows merged as native tabs of one window.
 pub trait ProjectLauncher: Send + Sync {
-    fn open(&self, app_path: &str, project_path: &str) -> Result<(), String>;
+    fn open(&self, app_path: &str, project_path: &str, in_tabs: bool) -> Result<(), String>;
     /// Which of the given project folder names are currently open in an IDE.
     /// Returns a map of name -> IDE process name. Best-effort.
     fn scan_open(&self, names: &[String]) -> HashMap<String, String>;
@@ -39,7 +41,7 @@ pub struct MacLauncher;
 
 #[cfg(target_os = "macos")]
 impl ProjectLauncher for MacLauncher {
-    fn open(&self, app_path: &str, project_path: &str) -> Result<(), String> {
+    fn open(&self, app_path: &str, project_path: &str, in_tabs: bool) -> Result<(), String> {
         use std::process::Command;
 
         // 1. If the project is already open in this IDE, switch to its window
@@ -55,7 +57,17 @@ impl ProjectLauncher for MacLauncher {
             .arg(project_path)
             .spawn()
             .map(|_| ())
-            .map_err(|e| format!("Failed to launch IDE: {e}"))
+            .map_err(|e| format!("Failed to launch IDE: {e}"))?;
+
+        // 3. Tab mode: once the new project window appears, merge the IDE's
+        //    windows into native macOS tabs (best-effort, in the background —
+        //    works for IDEs whose Window menu has "Merge All Windows", e.g.
+        //    JetBrains; silently does nothing for the rest).
+        if in_tabs {
+            let proc_name = process_name_for(app_path);
+            std::thread::spawn(move || merge_windows_when_ready(&proc_name));
+        }
+        Ok(())
     }
 
     fn scan_open(&self, names: &[String]) -> HashMap<String, String> {
@@ -151,6 +163,43 @@ fn applescript_quote(s: &str) -> String {
     format!("\"{escaped}\"")
 }
 
+/// Poll the IDE for up to ~12s; as soon as it has more than one window, click
+/// Window → "Merge All Windows" so projects become native macOS tabs.
+/// Best-effort: needs Accessibility (already required for focus/scan) and an
+/// IDE that exposes that menu item (JetBrains family does; Electron-based
+/// editors like VS Code don't — for those this is a silent no-op).
+#[cfg(target_os = "macos")]
+fn merge_windows_when_ready(proc_name: &str) {
+    use std::process::Command;
+    use std::thread::sleep;
+    use std::time::Duration;
+
+    let app_q = applescript_quote(proc_name);
+    let script = format!(
+        r#"tell application "System Events"
+    if not (exists (process {app})) then return "SKIP"
+    tell process {app}
+        if (count of windows) < 2 then return "SKIP"
+        try
+            click menu item "Merge All Windows" of menu "Window" of menu bar item "Window" of menu bar 1
+            return "MERGED"
+        end try
+    end tell
+end tell
+return "SKIP""#,
+        app = app_q
+    );
+
+    for _ in 0..6 {
+        sleep(Duration::from_millis(2000));
+        match Command::new("osascript").arg("-e").arg(&script).output() {
+            Ok(out) if String::from_utf8_lossy(&out.stdout).contains("MERGED") => return,
+            Ok(_) => continue,
+            Err(_) => return,
+        }
+    }
+}
+
 #[cfg(target_os = "macos")]
 fn scan_open_macos(names: &[String]) -> HashMap<String, String> {
     use std::process::Command;
@@ -236,9 +285,11 @@ pub struct LinuxLauncher;
 
 #[cfg(all(unix, not(target_os = "macos")))]
 impl ProjectLauncher for LinuxLauncher {
-    fn open(&self, app_path: &str, project_path: &str) -> Result<(), String> {
+    fn open(&self, app_path: &str, project_path: &str, in_tabs: bool) -> Result<(), String> {
         use std::process::Command;
 
+        // Tab mode is macOS-only (native window tabs); ignored here.
+        let _ = in_tabs;
         // Try to focus an already-open window (via wmctrl) before launching.
         if focus_existing_window(app_path, project_path) {
             return Ok(());
@@ -374,9 +425,11 @@ pub struct WindowsLauncher;
 
 #[cfg(target_os = "windows")]
 impl ProjectLauncher for WindowsLauncher {
-    fn open(&self, app_path: &str, project_path: &str) -> Result<(), String> {
+    fn open(&self, app_path: &str, project_path: &str, in_tabs: bool) -> Result<(), String> {
         use std::process::Command;
 
+        // Tab mode is macOS-only (native window tabs); ignored here.
+        let _ = in_tabs;
         Command::new(app_path)
             .arg(project_path)
             .spawn()

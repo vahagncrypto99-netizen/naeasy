@@ -17,6 +17,9 @@ export const setDefaultIde = (id) => invoke("set_default_ide", { id });
 export const openProject = (projectPath, ideId) =>
   invoke("open_project", { projectPath, ideId: ideId ?? null });
 export const scanOpenProjects = (names) => invoke("scan_open_projects", { names });
+export const setProjectIde = (projectPath, ideId) =>
+  invoke("set_project_ide", { projectPath, ideId: ideId ?? null });
+export const setOpenInTabs = (enabled) => invoke("set_open_in_tabs", { enabled });
 export const setShortcut = (accel) => invoke("set_shortcut", { accel });
 export const quitApp = () => invoke("quit_app");
 

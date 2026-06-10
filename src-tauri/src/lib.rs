@@ -95,7 +95,9 @@ pub fn run() {
             ui::commands::reveal_in_finder,
             ui::commands::quit_app,
             ui::commands::set_shortcut,
-            ui::commands::scan_open_projects
+            ui::commands::scan_open_projects,
+            ui::commands::set_project_ide,
+            ui::commands::set_open_in_tabs
         ])
         .on_window_event(|window, event| {
             // The red close button hides the window instead of quitting, so the

@@ -73,6 +73,22 @@ pub fn scan_open_projects(
     state.service.scan_open(&names)
 }
 
+/// Remember (or clear, with null) the preferred IDE for one project.
+#[tauri::command]
+pub fn set_project_ide(
+    state: State<AppState>,
+    project_path: String,
+    ide_id: Option<String>,
+) -> Result<AppData, String> {
+    state.service.set_project_ide(project_path, ide_id)
+}
+
+/// Toggle tabs-vs-windows mode for opening projects.
+#[tauri::command]
+pub fn set_open_in_tabs(state: State<AppState>, enabled: bool) -> Result<AppData, String> {
+    state.service.set_open_in_tabs(enabled)
+}
+
 #[tauri::command]
 pub fn set_shortcut(
     app: tauri::AppHandle,

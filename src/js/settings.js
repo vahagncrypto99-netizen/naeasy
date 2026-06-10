@@ -15,41 +15,25 @@ export function prettyAccel(a) {
     .replace(/\+/g, "");
 }
 
-// ------------------------- IDE list -------------------------
+// ------------------------- Default-IDE select -------------------------
 
 export function renderIdeList() {
-  const list = $("#ide-list");
   const select = $("#default-ide-select");
+  const removeBtn = $("#remove-ide");
 
-  // Default-IDE dropdown.
   if (!store.state.ides.length) {
     select.innerHTML = `<option value="">No IDE</option>`;
     select.disabled = true;
-  } else {
-    select.disabled = false;
-    select.innerHTML = store.state.ides
-      .map(
-        (ide) =>
-          `<option value="${ide.id}" ${ide.id === store.state.default_ide_id ? "selected" : ""}>${escapeHtml(ide.name)}</option>`
-      )
-      .join("");
-  }
-
-  if (!store.state.ides.length) {
-    list.innerHTML = `<p class="hint">No IDEs configured. Use Auto-detect or Add IDE.</p>`;
+    removeBtn.disabled = true;
     return;
   }
-  list.innerHTML = store.state.ides
-    .map((ide) => {
-      const isDef = ide.id === store.state.default_ide_id;
-      return `<li class="ide-item">
-        <div style="flex:1; min-width:0">
-          <div class="ide-name">${escapeHtml(ide.name)}${isDef ? ' <span class="ide-default-tag">default</span>' : ""}</div>
-          <div class="ide-path">${escapeHtml(ide.path)}</div>
-        </div>
-        <span class="ide-remove" data-remove-ide="${ide.id}" title="Remove">✕</span>
-      </li>`;
-    })
+  select.disabled = false;
+  removeBtn.disabled = false;
+  select.innerHTML = store.state.ides
+    .map(
+      (ide) =>
+        `<option value="${ide.id}" ${ide.id === store.state.default_ide_id ? "selected" : ""}>${escapeHtml(ide.name)}</option>`
+    )
     .join("");
 }
 
@@ -108,11 +92,10 @@ export function initSettings({ refresh, applyState }) {
     setStatus("IDE added");
   });
 
-  $("#ide-list").addEventListener("click", (e) => {
-    const remove = e.target.closest("[data-remove-ide]");
-    if (remove) {
-      refresh(() => api.removeIde(remove.getAttribute("data-remove-ide")));
-    }
+  // ✕ removes the IDE currently selected in the Default dropdown.
+  $("#remove-ide").addEventListener("click", () => {
+    const id = $("#default-ide-select").value;
+    if (id) refresh(() => api.removeIde(id));
   });
 
   $("#default-ide-select").addEventListener("change", (e) => {
@@ -151,6 +134,11 @@ export function initSettings({ refresh, applyState }) {
       }
     };
     document.addEventListener("keydown", onKey, true);
+  });
+
+  // Tabs-vs-windows mode for opening projects.
+  $("#tabs-toggle").addEventListener("change", (e) => {
+    refresh(() => api.setOpenInTabs(e.target.checked));
   });
 
   const autostartToggle = $("#autostart-toggle");

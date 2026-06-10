@@ -10,9 +10,11 @@ import { initKeyboard } from "./shortcuts.js";
 function applyState(data) {
   store.state = data;
   if (!store.state.recents) store.state.recents = {};
+  if (!store.state.project_ides) store.state.project_ides = {};
   const def = ideName(store.state.default_ide_id);
   $("#default-ide-label").textContent = def ? `Default: ${def}` : "No IDE";
   $("#shortcut-btn").textContent = prettyAccel(store.state.shortcut);
+  $("#tabs-toggle").checked = !!store.state.open_in_tabs;
   render();
   renderIdeList();
 }
@@ -76,6 +78,12 @@ initTree({
   openProject,
   addWorkspace,
   removeWorkspace: (id) => refresh(() => api.removeWorkspace(id)),
+  // Picking an IDE from a project's badge popover is remembered for that
+  // project (null = clear the override), then the project opens with it.
+  pickProjectIde: async (path, ideId) => {
+    await refresh(() => api.setProjectIde(path, ideId));
+    openProject(path, ideId);
+  },
 });
 initSettings({ refresh, applyState });
 initKeyboard({ openProject });
@@ -98,6 +106,9 @@ $("#rescan").addEventListener("click", () => {
     refreshOpenNow();
     setInterval(refreshOpenNow, 6000);
     window.addEventListener("focus", refreshOpenNow);
+    // Auto-rescan the workspace tree every 5 minutes — a cheap directory walk
+    // (skips node_modules etc.), so new/removed repos appear by themselves.
+    setInterval(() => refresh(() => api.rescan()), 5 * 60 * 1000);
   } catch (e) {
     setStatus(String(e));
   }
