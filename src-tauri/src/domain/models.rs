@@ -1,0 +1,90 @@
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Workspace {
+    pub id: String,
+    pub name: String,
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Ide {
+    pub id: String,
+    pub name: String,
+    /// Full path to the application bundle, e.g. /Applications/PhpStorm.app
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Config {
+    #[serde(default)]
+    pub workspaces: Vec<Workspace>,
+    #[serde(default)]
+    pub ides: Vec<Ide>,
+    #[serde(default)]
+    pub default_ide_id: Option<String>,
+    /// Global hotkey accelerator (e.g. "CmdOrCtrl+Shift+M"). None = default.
+    #[serde(default)]
+    pub shortcut: Option<String>,
+    /// Last-opened info per project path.
+    #[serde(default)]
+    pub recents: std::collections::HashMap<String, Recent>,
+}
+
+pub fn default_shortcut() -> String {
+    "CmdOrCtrl+Shift+M".to_string()
+}
+
+/// Per-project usage info, keyed by absolute project path.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Recent {
+    /// Unix seconds of the last time the project was opened from naeasy.
+    pub last_opened: u64,
+    /// Name of the IDE it was last opened with.
+    pub ide: String,
+}
+
+pub fn now_secs() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// A node in the project tree. Leaves with `is_repo = true` are openable Git projects.
+#[derive(Debug, Clone, Serialize)]
+pub struct TreeNode {
+    pub name: String,
+    pub path: String,
+    pub is_repo: bool,
+    pub children: Vec<TreeNode>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct WorkspaceView {
+    pub id: String,
+    pub name: String,
+    pub path: String,
+    pub tree: TreeNode,
+    pub repo_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct AppData {
+    pub workspaces: Vec<WorkspaceView>,
+    pub ides: Vec<Ide>,
+    pub default_ide_id: Option<String>,
+    pub shortcut: String,
+    pub recents: std::collections::HashMap<String, Recent>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_shortcut_is_stable() {
+        assert_eq!(default_shortcut(), "CmdOrCtrl+Shift+M");
+    }
+}
