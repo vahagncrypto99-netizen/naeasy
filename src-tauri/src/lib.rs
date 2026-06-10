@@ -1,142 +1,57 @@
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::path::PathBuf;
+use std::sync::Arc;
 use tauri::{Manager, State};
 
+mod app;
 mod domain;
 mod infra;
 
-use domain::models::{default_shortcut, now_secs, AppData, Config, Ide, Recent, Workspace};
-use domain::tree::build_app_data;
+use app::state::AppState;
+use app::workspace_service::WorkspaceService;
+use domain::models::AppData;
 use infra::config_repository::{ConfigRepository, JsonConfigRepository};
-use infra::ide_detector::{ide_name_from_path, IdeDetector};
-use infra::project_launcher::ProjectLauncher;
 use infra::shortcut::ShortcutService;
-
-struct AppState {
-    config: Mutex<Config>,
-    repo: Arc<dyn ConfigRepository>,
-    detector: Arc<dyn IdeDetector>,
-    launcher: Arc<dyn ProjectLauncher>,
-}
-
-fn gen_id() -> String {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    use std::time::{SystemTime, UNIX_EPOCH};
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
-    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-    format!("{:x}-{:x}", nanos, n)
-}
 
 // ------------------------- Commands -------------------------
 
 #[tauri::command]
 fn get_data(state: State<AppState>) -> AppData {
-    let config = state.config.lock().unwrap();
-    build_app_data(&config)
+    state.service.app_data()
 }
 
 #[tauri::command]
 fn rescan(state: State<AppState>) -> AppData {
-    let config = state.config.lock().unwrap();
-    build_app_data(&config)
+    state.service.app_data()
 }
 
 #[tauri::command]
 fn add_workspace(state: State<AppState>, path: String) -> Result<AppData, String> {
-    let p = PathBuf::from(&path);
-    if !p.is_dir() {
-        return Err(format!("Not a directory: {path}"));
-    }
-    let mut config = state.config.lock().unwrap();
-    if config.workspaces.iter().any(|w| w.path == path) {
-        return Err("Workspace already added".into());
-    }
-    let name = p
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| path.clone());
-    config.workspaces.push(Workspace {
-        id: gen_id(),
-        name,
-        path,
-    });
-    state.repo.save(&config)?;
-    Ok(build_app_data(&config))
+    state.service.add_workspace(path)
 }
 
 #[tauri::command]
 fn remove_workspace(state: State<AppState>, id: String) -> Result<AppData, String> {
-    let mut config = state.config.lock().unwrap();
-    config.workspaces.retain(|w| w.id != id);
-    state.repo.save(&config)?;
-    Ok(build_app_data(&config))
+    state.service.remove_workspace(&id)
 }
 
 #[tauri::command]
 fn detect_ides(state: State<AppState>) -> Result<AppData, String> {
-    let detected = state.detector.detect();
-    let mut config = state.config.lock().unwrap();
-    for ide in detected {
-        if !config.ides.iter().any(|i| i.path == ide.path) {
-            config.ides.push(ide);
-        }
-    }
-    if config.default_ide_id.is_none() {
-        config.default_ide_id = config.ides.first().map(|i| i.id.clone());
-    }
-    state.repo.save(&config)?;
-    Ok(build_app_data(&config))
+    state.service.detect_ides()
 }
 
 #[tauri::command]
 fn add_ide(state: State<AppState>, path: String) -> Result<AppData, String> {
-    let p = PathBuf::from(&path);
-    if !p.exists() {
-        return Err(format!("Path does not exist: {path}"));
-    }
-    let mut config = state.config.lock().unwrap();
-    if config.ides.iter().any(|i| i.path == path) {
-        return Err("IDE already added".into());
-    }
-    let name = ide_name_from_path(&path);
-    let ide = Ide {
-        id: gen_id(),
-        name,
-        path,
-    };
-    let new_id = ide.id.clone();
-    config.ides.push(ide);
-    if config.default_ide_id.is_none() {
-        config.default_ide_id = Some(new_id);
-    }
-    state.repo.save(&config)?;
-    Ok(build_app_data(&config))
+    state.service.add_ide(path)
 }
 
 #[tauri::command]
 fn remove_ide(state: State<AppState>, id: String) -> Result<AppData, String> {
-    let mut config = state.config.lock().unwrap();
-    config.ides.retain(|i| i.id != id);
-    if config.default_ide_id.as_deref() == Some(id.as_str()) {
-        config.default_ide_id = config.ides.first().map(|i| i.id.clone());
-    }
-    state.repo.save(&config)?;
-    Ok(build_app_data(&config))
+    state.service.remove_ide(&id)
 }
 
 #[tauri::command]
 fn set_default_ide(state: State<AppState>, id: String) -> Result<AppData, String> {
-    let mut config = state.config.lock().unwrap();
-    if !config.ides.iter().any(|i| i.id == id) {
-        return Err("Unknown IDE".into());
-    }
-    config.default_ide_id = Some(id);
-    state.repo.save(&config)?;
-    Ok(build_app_data(&config))
+    state.service.set_default_ide(id)
 }
 
 /// Open a project folder in the chosen (or default) IDE.
@@ -146,38 +61,14 @@ fn open_project(
     project_path: String,
     ide_id: Option<String>,
 ) -> Result<(), String> {
-    let mut config = state.config.lock().unwrap();
-    let chosen = ide_id.or_else(|| config.default_ide_id.clone());
-    let ide = match chosen.and_then(|id| config.ides.iter().find(|i| i.id == id).cloned()) {
-        Some(ide) => ide,
-        None => return Err("No IDE selected. Add an IDE first.".into()),
-    };
-
-    if !Path::new(&project_path).exists() {
-        return Err(format!("Project not found: {project_path}"));
-    }
-
-    state.launcher.open(&ide.path, &project_path)?;
-
-    // Remember when and with which IDE this project was opened.
-    config.recents.insert(
-        project_path.clone(),
-        Recent {
-            last_opened: now_secs(),
-            ide: ide.name.clone(),
-        },
-    );
-    let _ = state.repo.save(&config);
-    Ok(())
+    state.service.open_project(project_path, ide_id)
 }
 
 /// Reveal the project folder in Finder.
 #[tauri::command]
 fn reveal_in_finder(state: State<AppState>, path: String) -> Result<(), String> {
-    state.launcher.reveal(&path)
+    state.service.reveal(&path)
 }
-
-// ------------------------- Open-project detection -------------------------
 
 /// Which of the given project folder names are currently open in an IDE.
 /// Returns a map of name -> IDE process name. Best-effort (needs Accessibility).
@@ -186,7 +77,7 @@ fn scan_open_projects(
     state: State<AppState>,
     names: Vec<String>,
 ) -> std::collections::HashMap<String, String> {
-    state.launcher.scan_open(&names)
+    state.service.scan_open(&names)
 }
 
 // ------------------------- Global shortcut -------------------------
@@ -212,10 +103,7 @@ fn set_shortcut(
     accel: String,
 ) -> Result<AppData, String> {
     ShortcutService::register(&app, &accel)?;
-    let mut config = state.config.lock().unwrap();
-    config.shortcut = Some(accel);
-    state.repo.save(&config)?;
-    Ok(build_app_data(&config))
+    state.service.set_shortcut(accel)
 }
 
 // ------------------------- Tray + window -------------------------
@@ -265,14 +153,13 @@ pub fn run() {
             let config_path = config_dir.join("config.json");
             let repo: Arc<dyn ConfigRepository> =
                 Arc::new(JsonConfigRepository::new(config_path));
-            let config = repo.load();
-            let shortcut_accel = config.shortcut.clone().unwrap_or_else(default_shortcut);
-            app.manage(AppState {
-                config: Mutex::new(config),
+            let service = WorkspaceService::new(
                 repo,
-                detector: infra::ide_detector::platform_detector(),
-                launcher: infra::project_launcher::platform_launcher(),
-            });
+                infra::ide_detector::platform_detector(),
+                infra::project_launcher::platform_launcher(),
+            );
+            let shortcut_accel = service.shortcut();
+            app.manage(AppState { service });
 
             // Register the global hotkey that toggles the window.
             if let Err(e) = ShortcutService::register(app.handle(), &shortcut_accel) {

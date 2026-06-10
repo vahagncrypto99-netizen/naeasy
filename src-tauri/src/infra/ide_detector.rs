@@ -1,8 +1,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use crate::domain::models::Ide;
-use crate::gen_id;
+use crate::domain::models::{gen_id, Ide};
 
 /// Strategy for auto-detecting installed IDEs. One implementation per OS,
 /// selected once at the composition root.
