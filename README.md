@@ -99,8 +99,8 @@ rm -rf "$HOME/Library/Application Support/com.vahagn.naeasy"
 
 <p align="center">
   <sub>
-    project launcher · project switcher · git repository manager · menu bar app · tray app ·
-    quick open · IDE launcher · JetBrains Toolbox alternative · Spotlight for projects ·
-    workspace manager · developer productivity · Tauri · Rust · macOS · Linux
+    open any project in seconds · switch between projects instantly · all your git projects in one place ·
+    stop digging through folders for that one repo · manage dozens of repositories without chaos ·
+    pick up where you left off · your recent work always at hand · one shortcut instead of Finder, terminal and welcome screens
   </sub>
 </p>

@@ -81,7 +81,13 @@ src/
     └── shortcuts.js   # type-to-search + arrow/Enter handling
 ```
 
-## Incremental migration plan (compile-checkpointed)
+## Incremental migration plan (compile-checkpointed) — ✅ COMPLETED June 2026
+
+All 7 slices below are done (one git commit per slice, build/tests green after
+each). Minor deviations from the plan: `ProjectLauncher` exposes `open` /
+`scan_open` / `reveal` (focus-or-open is internal to `open` — no caller needs
+focus separately); `gen_id` lives in `domain/models.rs` (shared by service and
+detectors); the frontend gained a small extra `js/dom.js` helpers module.
 
 Because a macOS `.app` must be compiled on macOS (CI/local), each slice ends
 with a `./install.sh` rebuild to keep the app green. Order:
