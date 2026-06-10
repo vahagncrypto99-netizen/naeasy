@@ -1,34 +1,19 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tauri::{Manager, State};
 
 mod domain;
+mod infra;
 
 use domain::models::{default_shortcut, now_secs, AppData, Config, Ide, Recent, Workspace};
 use domain::tree::build_app_data;
+use infra::config_repository::{ConfigRepository, JsonConfigRepository};
 
 struct AppState {
     config: Mutex<Config>,
-    config_path: Mutex<PathBuf>,
-}
-
-// ------------------------- Persistence -------------------------
-
-fn load_config(path: &Path) -> Config {
-    match fs::read_to_string(path) {
-        Ok(text) => serde_json::from_str(&text).unwrap_or_default(),
-        Err(_) => Config::default(),
-    }
-}
-
-fn save_config(path: &Path, config: &Config) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    let text = serde_json::to_string_pretty(config).map_err(|e| e.to_string())?;
-    fs::write(path, text).map_err(|e| e.to_string())
+    repo: Arc<dyn ConfigRepository>,
 }
 
 fn gen_id() -> String {
@@ -263,8 +248,7 @@ fn add_workspace(state: State<AppState>, path: String) -> Result<AppData, String
         name,
         path,
     });
-    let cp = state.config_path.lock().unwrap();
-    save_config(&cp, &config)?;
+    state.repo.save(&config)?;
     Ok(build_app_data(&config))
 }
 
@@ -272,8 +256,7 @@ fn add_workspace(state: State<AppState>, path: String) -> Result<AppData, String
 fn remove_workspace(state: State<AppState>, id: String) -> Result<AppData, String> {
     let mut config = state.config.lock().unwrap();
     config.workspaces.retain(|w| w.id != id);
-    let cp = state.config_path.lock().unwrap();
-    save_config(&cp, &config)?;
+    state.repo.save(&config)?;
     Ok(build_app_data(&config))
 }
 
@@ -289,8 +272,7 @@ fn detect_ides(state: State<AppState>) -> Result<AppData, String> {
     if config.default_ide_id.is_none() {
         config.default_ide_id = config.ides.first().map(|i| i.id.clone());
     }
-    let cp = state.config_path.lock().unwrap();
-    save_config(&cp, &config)?;
+    state.repo.save(&config)?;
     Ok(build_app_data(&config))
 }
 
@@ -315,8 +297,7 @@ fn add_ide(state: State<AppState>, path: String) -> Result<AppData, String> {
     if config.default_ide_id.is_none() {
         config.default_ide_id = Some(new_id);
     }
-    let cp = state.config_path.lock().unwrap();
-    save_config(&cp, &config)?;
+    state.repo.save(&config)?;
     Ok(build_app_data(&config))
 }
 
@@ -327,8 +308,7 @@ fn remove_ide(state: State<AppState>, id: String) -> Result<AppData, String> {
     if config.default_ide_id.as_deref() == Some(id.as_str()) {
         config.default_ide_id = config.ides.first().map(|i| i.id.clone());
     }
-    let cp = state.config_path.lock().unwrap();
-    save_config(&cp, &config)?;
+    state.repo.save(&config)?;
     Ok(build_app_data(&config))
 }
 
@@ -339,8 +319,7 @@ fn set_default_ide(state: State<AppState>, id: String) -> Result<AppData, String
         return Err("Unknown IDE".into());
     }
     config.default_ide_id = Some(id);
-    let cp = state.config_path.lock().unwrap();
-    save_config(&cp, &config)?;
+    state.repo.save(&config)?;
     Ok(build_app_data(&config))
 }
 
@@ -372,8 +351,7 @@ fn open_project(
             ide: ide.name.clone(),
         },
     );
-    let cp = state.config_path.lock().unwrap();
-    let _ = save_config(&cp, &config);
+    let _ = state.repo.save(&config);
     Ok(())
 }
 
@@ -738,8 +716,7 @@ fn set_shortcut(
     register_shortcut(&app, &accel)?;
     let mut config = state.config.lock().unwrap();
     config.shortcut = Some(accel);
-    let cp = state.config_path.lock().unwrap();
-    save_config(&cp, &config)?;
+    state.repo.save(&config)?;
     Ok(build_app_data(&config))
 }
 
@@ -788,11 +765,13 @@ pub fn run() {
                 .app_config_dir()
                 .unwrap_or_else(|_| PathBuf::from("."));
             let config_path = config_dir.join("config.json");
-            let config = load_config(&config_path);
+            let repo: Arc<dyn ConfigRepository> =
+                Arc::new(JsonConfigRepository::new(config_path));
+            let config = repo.load();
             let shortcut_accel = config.shortcut.clone().unwrap_or_else(default_shortcut);
             app.manage(AppState {
                 config: Mutex::new(config),
-                config_path: Mutex::new(config_path),
+                repo,
             });
 
             // Register the global hotkey that toggles the window.
