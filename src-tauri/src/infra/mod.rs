@@ -2,3 +2,5 @@
 
 pub mod config_repository;
 pub mod ide_detector;
+pub mod project_launcher;
+pub mod shortcut;

@@ -1,5 +1,4 @@
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::{Arc, Mutex};
 use tauri::{Manager, State};
 
@@ -10,11 +9,14 @@ use domain::models::{default_shortcut, now_secs, AppData, Config, Ide, Recent, W
 use domain::tree::build_app_data;
 use infra::config_repository::{ConfigRepository, JsonConfigRepository};
 use infra::ide_detector::{ide_name_from_path, IdeDetector};
+use infra::project_launcher::ProjectLauncher;
+use infra::shortcut::ShortcutService;
 
 struct AppState {
     config: Mutex<Config>,
     repo: Arc<dyn ConfigRepository>,
     detector: Arc<dyn IdeDetector>,
+    launcher: Arc<dyn ProjectLauncher>,
 }
 
 fn gen_id() -> String {
@@ -155,7 +157,7 @@ fn open_project(
         return Err(format!("Project not found: {project_path}"));
     }
 
-    open_in_app(&ide.path, &project_path)?;
+    state.launcher.open(&ide.path, &project_path)?;
 
     // Remember when and with which IDE this project was opened.
     config.recents.insert(
@@ -171,167 +173,8 @@ fn open_project(
 
 /// Reveal the project folder in Finder.
 #[tauri::command]
-fn reveal_in_finder(path: String) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    {
-        Command::new("open")
-            .arg("-R")
-            .arg(&path)
-            .spawn()
-            .map_err(|e| e.to_string())?;
-        return Ok(());
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = path;
-        Err("Reveal in Finder is only supported on macOS".into())
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn open_in_app(app_path: &str, project_path: &str) -> Result<(), String> {
-    // 1. If the project is already open in this IDE, switch to its window
-    //    (un-minimize + raise + focus) instead of opening it again.
-    if focus_existing_window(app_path, project_path) {
-        return Ok(());
-    }
-    // 2. Otherwise launch / open it. `open -a` also focuses an existing
-    //    project window for IDEs that support it (JetBrains, VS Code, …).
-    Command::new("open")
-        .arg("-a")
-        .arg(app_path)
-        .arg(project_path)
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| format!("Failed to launch IDE: {e}"))
-}
-
-/// Map an app bundle name to the process name used by System Events.
-/// Most apps match their bundle name; a few editors differ.
-#[cfg(target_os = "macos")]
-fn process_name_for(app_path: &str) -> String {
-    let bundle = ide_name_from_path(app_path);
-    match bundle.as_str() {
-        "Visual Studio Code" => "Code".to_string(),
-        "Visual Studio Code - Insiders" => "Code - Insiders".to_string(),
-        "VSCodium" => "VSCodium".to_string(),
-        other => other.to_string(),
-    }
-}
-
-/// Best-effort: find a window of the running IDE whose title contains the
-/// project folder name, un-minimize it, raise it and focus the app.
-/// Returns true only if a matching window was focused.
-///
-/// Uses AppleScript / System Events. If Accessibility permission is not
-/// granted the script fails and we return false (caller falls back to `open`).
-#[cfg(target_os = "macos")]
-fn focus_existing_window(app_path: &str, project_path: &str) -> bool {
-    let proc_name = process_name_for(app_path);
-    let project_name = Path::new(project_path)
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_default();
-    if project_name.is_empty() {
-        return false;
-    }
-
-    let app_q = applescript_quote(&proc_name);
-    let proj_q = applescript_quote(&project_name);
-
-    // Match windows whose title contains the project name. JetBrains and most
-    // editors put the project folder name in the window title.
-    let script = format!(
-        r#"tell application "System Events"
-    if exists (process {app}) then
-        tell process {app}
-            set matches to (every window whose name contains {proj})
-            if (count of matches) > 0 then
-                set w to item 1 of matches
-                try
-                    set value of attribute "AXMinimized" of w to false
-                end try
-                try
-                    perform action "AXRaise" of w
-                end try
-                set frontmost to true
-                return "FOCUSED"
-            end if
-        end tell
-    end if
-end tell
-return "NOFOCUS""#,
-        app = app_q,
-        proj = proj_q
-    );
-
-    match Command::new("osascript").arg("-e").arg(&script).output() {
-        Ok(out) => {
-            out.status.success() && String::from_utf8_lossy(&out.stdout).contains("FOCUSED")
-        }
-        Err(_) => false,
-    }
-}
-
-/// Quote a string as an AppleScript string literal.
-#[cfg(target_os = "macos")]
-fn applescript_quote(s: &str) -> String {
-    let escaped = s.replace('\\', "\\\\").replace('"', "\\\"");
-    format!("\"{escaped}\"")
-}
-
-#[cfg(target_os = "windows")]
-fn open_in_app(app_path: &str, project_path: &str) -> Result<(), String> {
-    Command::new(app_path)
-        .arg(project_path)
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| format!("Failed to launch IDE: {e}"))
-}
-
-#[cfg(all(unix, not(target_os = "macos")))]
-fn open_in_app(app_path: &str, project_path: &str) -> Result<(), String> {
-    // Try to focus an already-open window (via wmctrl) before launching.
-    if focus_existing_window(app_path, project_path) {
-        return Ok(());
-    }
-    Command::new(app_path)
-        .arg(project_path)
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| format!("Failed to launch IDE: {e}"))
-}
-
-/// Linux (X11): focus a window whose title contains the project folder name,
-/// using `wmctrl`. Returns false if wmctrl is missing or nothing matched.
-#[cfg(all(unix, not(target_os = "macos")))]
-fn focus_existing_window(_app_path: &str, project_path: &str) -> bool {
-    let name = match Path::new(project_path).file_name() {
-        Some(n) => n.to_string_lossy().to_string(),
-        None => return false,
-    };
-    if name.is_empty() {
-        return false;
-    }
-    let out = match Command::new("wmctrl").arg("-l").output() {
-        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).to_string(),
-        _ => return false,
-    };
-    for line in out.lines() {
-        // Format: <winid> <desktop> <host> <title...>
-        let mut it = line.split_whitespace();
-        let id = it.next();
-        let _desktop = it.next();
-        let _host = it.next();
-        let title = it.collect::<Vec<_>>().join(" ");
-        if title.contains(&name) {
-            if let Some(id) = id {
-                let _ = Command::new("wmctrl").arg("-i").arg("-a").arg(id).status();
-                return true;
-            }
-        }
-    }
-    false
+fn reveal_in_finder(state: State<AppState>, path: String) -> Result<(), String> {
+    state.launcher.reveal(&path)
 }
 
 // ------------------------- Open-project detection -------------------------
@@ -339,160 +182,11 @@ fn focus_existing_window(_app_path: &str, project_path: &str) -> bool {
 /// Which of the given project folder names are currently open in an IDE.
 /// Returns a map of name -> IDE process name. Best-effort (needs Accessibility).
 #[tauri::command]
-fn scan_open_projects(names: Vec<String>) -> std::collections::HashMap<String, String> {
-    #[cfg(target_os = "macos")]
-    {
-        scan_open_macos(&names)
-    }
-    #[cfg(target_os = "linux")]
-    {
-        scan_open_linux(&names)
-    }
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    {
-        let _ = names;
-        std::collections::HashMap::new()
-    }
-}
-
-/// Linux (X11): match project names against open IDE window titles via wmctrl.
-#[cfg(target_os = "linux")]
-fn scan_open_linux(names: &[String]) -> std::collections::HashMap<String, String> {
-    use std::collections::HashMap;
-    let mut result = HashMap::new();
-    // `wmctrl -lx`: <winid> <desktop> <wm_class> <host> <title...>
-    let out = match Command::new("wmctrl").arg("-lx").output() {
-        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).to_string(),
-        _ => return result,
-    };
-    let lines: Vec<(String, String)> = out
-        .lines()
-        .filter_map(|l| {
-            let mut it = l.split_whitespace();
-            let _id = it.next()?;
-            let _desktop = it.next()?;
-            let class = it.next()?.to_string();
-            let _host = it.next()?;
-            let title = it.collect::<Vec<_>>().join(" ");
-            Some((class, title))
-        })
-        .collect();
-
-    for name in names {
-        if name.is_empty() {
-            continue;
-        }
-        for (class, title) in &lines {
-            if title.contains(name.as_str()) {
-                result.insert(name.clone(), ide_label_from_class(class));
-                break;
-            }
-        }
-    }
-    result
-}
-
-#[cfg(target_os = "linux")]
-fn ide_label_from_class(class: &str) -> String {
-    let c = class.to_lowercase();
-    let map = [
-        ("phpstorm", "PhpStorm"),
-        ("goland", "GoLand"),
-        ("datagrip", "DataGrip"),
-        ("pycharm", "PyCharm"),
-        ("idea", "IntelliJ IDEA"),
-        ("webstorm", "WebStorm"),
-        ("clion", "CLion"),
-        ("rubymine", "RubyMine"),
-        ("rider", "Rider"),
-        ("rustrover", "RustRover"),
-        ("cursor", "Cursor"),
-        ("code", "VS Code"),
-        ("zed", "Zed"),
-    ];
-    for (k, v) in map {
-        if c.contains(k) {
-            return v.to_string();
-        }
-    }
-    "IDE".to_string()
-}
-
-#[cfg(target_os = "macos")]
-fn scan_open_macos(names: &[String]) -> std::collections::HashMap<String, String> {
-    use std::collections::HashMap;
-    let mut result = HashMap::new();
-
-    let procs = [
-        "PhpStorm",
-        "GoLand",
-        "DataGrip",
-        "PyCharm",
-        "IntelliJ IDEA",
-        "WebStorm",
-        "CLion",
-        "RubyMine",
-        "Rider",
-        "RustRover",
-        "Fleet",
-        "Code",
-        "Cursor",
-        "Zed",
-        "Windsurf",
-    ];
-    let proc_list = procs
-        .iter()
-        .map(|p| format!("\"{p}\""))
-        .collect::<Vec<_>>()
-        .join(", ");
-
-    // Built via concatenation to avoid brace-escaping in format strings.
-    let script = String::from("set out to \"\"\n")
-        + "tell application \"System Events\"\n"
-        + "  repeat with pn in {"
-        + &proc_list
-        + "}\n"
-        + "    set pname to (pn as text)\n"
-        + "    if exists (process pname) then\n"
-        + "      tell process pname\n"
-        + "        repeat with w in windows\n"
-        + "          try\n"
-        + "            set out to out & pname & tab & (name of w) & linefeed\n"
-        + "          end try\n"
-        + "        end repeat\n"
-        + "      end tell\n"
-        + "    end if\n"
-        + "  end repeat\n"
-        + "end tell\n"
-        + "return out";
-
-    let output = match Command::new("osascript").arg("-e").arg(&script).output() {
-        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).to_string(),
-        _ => return result,
-    };
-
-    let lines: Vec<(String, String)> = output
-        .lines()
-        .filter_map(|l| {
-            let mut parts = l.splitn(2, '\t');
-            let p = parts.next()?.trim().to_string();
-            let t = parts.next()?.to_string();
-            Some((p, t))
-        })
-        .collect();
-
-    for name in names {
-        if name.is_empty() {
-            continue;
-        }
-        for (proc, title) in &lines {
-            if title.contains(name.as_str()) {
-                result.insert(name.clone(), proc.clone());
-                break;
-            }
-        }
-    }
-    result
+fn scan_open_projects(
+    state: State<AppState>,
+    names: Vec<String>,
+) -> std::collections::HashMap<String, String> {
+    state.launcher.scan_open(&names)
 }
 
 // ------------------------- Global shortcut -------------------------
@@ -511,23 +205,13 @@ fn toggle_main(app: &tauri::AppHandle) {
     }
 }
 
-fn register_shortcut(app: &tauri::AppHandle, accel: &str) -> Result<(), String> {
-    use tauri_plugin_global_shortcut::GlobalShortcutExt;
-    let shortcut: tauri_plugin_global_shortcut::Shortcut = accel
-        .parse()
-        .map_err(|_| format!("Invalid shortcut: {accel}"))?;
-    let gs = app.global_shortcut();
-    let _ = gs.unregister_all();
-    gs.register(shortcut).map_err(|e| e.to_string())
-}
-
 #[tauri::command]
 fn set_shortcut(
     app: tauri::AppHandle,
     state: State<AppState>,
     accel: String,
 ) -> Result<AppData, String> {
-    register_shortcut(&app, &accel)?;
+    ShortcutService::register(&app, &accel)?;
     let mut config = state.config.lock().unwrap();
     config.shortcut = Some(accel);
     state.repo.save(&config)?;
@@ -587,10 +271,11 @@ pub fn run() {
                 config: Mutex::new(config),
                 repo,
                 detector: infra::ide_detector::platform_detector(),
+                launcher: infra::project_launcher::platform_launcher(),
             });
 
             // Register the global hotkey that toggles the window.
-            if let Err(e) = register_shortcut(app.handle(), &shortcut_accel) {
+            if let Err(e) = ShortcutService::register(app.handle(), &shortcut_accel) {
                 log::warn!("global shortcut '{shortcut_accel}' not registered: {e}");
             }
 
@@ -756,19 +441,3 @@ fn position_under_tray(window: &tauri::WebviewWindow, rect: &tauri::Rect) {
     }));
 }
 
-// ------------------------- Tests -------------------------
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn process_name_maps_vscode() {
-        assert_eq!(
-            process_name_for("/Applications/Visual Studio Code.app"),
-            "Code"
-        );
-        assert_eq!(process_name_for("/Applications/PhpStorm.app"), "PhpStorm");
-    }
-}
