@@ -26,7 +26,7 @@ cd naeasy
 
 The script first checks your environment (Xcode CLT, Node.js ≥ 18, npm, Rust). **If something is missing it prints the exact steps for that specific tool and stops.** Fix it, run again. Once everything is present it builds the release, copies `naeasy.app` into `/Applications` and launches it — no manual dragging.
 
-Re-running `./install.sh` reuses the existing build (instant). Force a clean recompile with `./install.sh --rebuild`.
+Re-running `./install.sh` always rebuilds and reinstalls — but Tauri/Cargo builds are **incremental**, so only changed code recompiles (fast). Use `./install.sh --rebuild` only for a full clean recompile (`cargo clean` first).
 
 > Note: the very first build compiles Rust on your Mac (a few minutes). A prebuilt binary can't be shipped cross-platform because a macOS `.app` must be built and signed on macOS. Subsequent builds are incremental.
 

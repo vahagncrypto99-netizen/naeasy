@@ -89,14 +89,17 @@ REBUILD=0
 [ "${1:-}" = "--rebuild" ] && REBUILD=1
 
 set -e
-if [ "$REBUILD" = "0" ] && [ -d "$APP_BUILD" ]; then
-  echo "▸ Using existing build (pass --rebuild to recompile)."
-else
-  echo "▸ npm install…"
-  npm install
-  echo "▸ Building release (first build compiles Rust — a few minutes; later builds are incremental)…"
-  npm run build
+echo "▸ npm install…"
+npm install
+# Always build so the install reflects your latest code. Tauri/Cargo builds
+# are incremental — only changed files recompile, so this is fast after the
+# first build. Use --rebuild for a full clean recompile.
+if [ "$REBUILD" = "1" ]; then
+  echo "▸ Clean rebuild (cargo clean)…"
+  (cd src-tauri && cargo clean) || true
 fi
+echo "▸ Building release (first build takes a few minutes; later builds are incremental)…"
+npm run build
 
 if [ ! -d "$APP_BUILD" ]; then
   echo "${RED}✗ Build did not produce $APP_BUILD${RESET}" >&2

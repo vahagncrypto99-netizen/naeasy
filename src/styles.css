@@ -63,24 +63,6 @@ body {
   font-weight: 600;
   letter-spacing: 0.2px;
 }
-/* Single custom window control: red = close (hides the window) */
-.win-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: none;
-  padding: 0;
-  flex-shrink: 0;
-  background: #ec6a5e;
-  cursor: pointer;
-  transition: filter 0.12s ease, transform 0.06s ease;
-}
-.win-dot:hover {
-  filter: brightness(1.12);
-}
-.win-dot:active {
-  transform: scale(0.9);
-}
 .logo {
   display: inline-flex;
   width: 24px;
@@ -180,6 +162,9 @@ body {
 
 .ws {
   margin-bottom: 6px;
+}
+.recents > .ws-head .ws-name {
+  color: var(--accent);
 }
 .ws-head {
   display: flex;

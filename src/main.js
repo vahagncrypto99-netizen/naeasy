@@ -124,6 +124,25 @@ function render() {
   }
 
   let html = "";
+
+  // Recent section (newest first) — shown only when not filtering.
+  if (!filter) {
+    const recents = recentEntries();
+    if (recents.length) {
+      const rc = collapsed.has("recent");
+      html += `<div class="ws recents ${rc ? "collapsed" : ""}">`;
+      html += `<div class="ws-head" data-recent>`;
+      html += `<span class="twisty">${rc ? "▸" : "▾"}</span>`;
+      html += `<span class="ws-name">Recent</span>`;
+      html += `<span class="count">${recents.length}</span>`;
+      html += `</div><div class="children">`;
+      for (const r of recents) {
+        html += renderNode({ name: r.name, path: r.path, is_repo: true, children: [] }, 0);
+      }
+      html += `</div></div>`;
+    }
+  }
+
   for (const ws of state.workspaces) {
     const wsCollapsed = collapsed.has("ws:" + ws.id);
     html += `<div class="ws ${wsCollapsed ? "collapsed" : ""}">`;
@@ -145,8 +164,9 @@ function render() {
 // ------------------------- Keyboard selection -------------------------
 
 function visibleRepoRows() {
+  // Exclude the Recent section so arrow navigation only walks the main tree.
   return [...content.querySelectorAll(".row.repo")].filter(
-    (r) => r.offsetParent !== null
+    (r) => r.offsetParent !== null && !r.closest(".recents")
   );
 }
 
@@ -186,6 +206,27 @@ function gatherRepos() {
   };
   state.workspaces.forEach((ws) => (ws.tree.children || []).forEach(walk));
   return out;
+}
+
+// Map of project path -> name for every repo in the current tree.
+function allRepoMap() {
+  const map = {};
+  const walk = (n) => {
+    if (n.is_repo) map[n.path] = n.name;
+    (n.children || []).forEach(walk);
+  };
+  state.workspaces.forEach((ws) => (ws.tree.children || []).forEach(walk));
+  return map;
+}
+
+// Top-N most recently opened projects (that still exist), newest first.
+function recentEntries(limit = 8) {
+  const repoMap = allRepoMap();
+  return Object.entries(state.recents || {})
+    .filter(([p]) => repoMap[p])
+    .sort((a, b) => (b[1].last_opened || 0) - (a[1].last_opened || 0))
+    .slice(0, limit)
+    .map(([path]) => ({ path, name: repoMap[path] }));
 }
 
 async function refreshOpenNow() {
@@ -350,6 +391,12 @@ content.addEventListener("click", (e) => {
     return;
   }
 
+  const recentHead = e.target.closest("[data-recent]");
+  if (recentHead) {
+    toggleCollapse("recent");
+    return;
+  }
+
   const row = e.target.closest(".row");
   if (!row) return;
   const path = row.getAttribute("data-path");
@@ -398,16 +445,6 @@ $("#settings-back").addEventListener("click", () => $("#settings").classList.add
 $("#detect-ides").addEventListener("click", () => refresh(() => invoke("detect_ides")));
 $("#add-ide").addEventListener("click", addIde);
 $("#quit-app").addEventListener("click", () => invoke("quit_app"));
-
-// Close button — hides the window (no Dock thumbnail). Reopen via the
-// menu-bar icon or the global shortcut.
-$("#win-close").addEventListener("click", () => {
-  try {
-    getCurrentWindow && getCurrentWindow().hide();
-  } catch (e) {
-    setStatus(String(e));
-  }
-});
 
 // Type-to-search + arrow/Enter navigation. Works the moment the window is
 // focused — no need to click the search field first.

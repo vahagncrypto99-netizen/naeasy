@@ -290,7 +290,21 @@ fn build_app_data(config: &Config) -> AppData {
 
 // ------------------------- IDE detection -------------------------
 
-/// Known IDE / editor bundle display names we try to auto-detect.
+fn home_dir() -> Option<PathBuf> {
+    std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(PathBuf::from)
+}
+
+/// Auto-detect installed IDEs (platform-specific), sorted by name.
+fn detect_installed_ides() -> Vec<Ide> {
+    let mut found = detect_platform_ides();
+    found.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    found
+}
+
+// ---- macOS: scan /Applications for known *.app bundles ----
+#[cfg(target_os = "macos")]
 const KNOWN_IDES: &[&str] = &[
     "PhpStorm",
     "GoLand",
@@ -316,10 +330,7 @@ const KNOWN_IDES: &[&str] = &[
     "Windsurf",
 ];
 
-fn home_dir() -> Option<PathBuf> {
-    std::env::var_os("HOME").map(PathBuf::from)
-}
-
+#[cfg(target_os = "macos")]
 fn scan_apps_dir(dir: &Path, found: &mut Vec<Ide>) {
     let entries = match fs::read_dir(dir) {
         Ok(e) => e,
@@ -347,18 +358,113 @@ fn scan_apps_dir(dir: &Path, found: &mut Vec<Ide>) {
     }
 }
 
-fn detect_installed_ides() -> Vec<Ide> {
+#[cfg(target_os = "macos")]
+fn detect_platform_ides() -> Vec<Ide> {
     let mut found: Vec<Ide> = Vec::new();
     let mut dirs: Vec<PathBuf> = vec![PathBuf::from("/Applications")];
     if let Some(home) = home_dir() {
         dirs.push(home.join("Applications"));
-        // JetBrains Toolbox default launcher location
         dirs.push(home.join("Applications/JetBrains Toolbox"));
     }
     for dir in dirs {
         scan_apps_dir(&dir, &mut found);
     }
-    found.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    found
+}
+
+/// command name -> display name (Linux PATH / Toolbox scripts).
+#[cfg(target_os = "linux")]
+const LINUX_CMDS: &[(&str, &str)] = &[
+    ("phpstorm", "PhpStorm"),
+    ("goland", "GoLand"),
+    ("datagrip", "DataGrip"),
+    ("pycharm", "PyCharm"),
+    ("idea", "IntelliJ IDEA"),
+    ("webstorm", "WebStorm"),
+    ("clion", "CLion"),
+    ("rubymine", "RubyMine"),
+    ("rider", "Rider"),
+    ("rustrover", "RustRover"),
+    ("code", "VS Code"),
+    ("codium", "VSCodium"),
+    ("cursor", "Cursor"),
+    ("zed", "Zed"),
+    ("subl", "Sublime Text"),
+];
+
+// ---- Linux: search PATH + JetBrains Toolbox scripts ----
+#[cfg(target_os = "linux")]
+fn detect_platform_ides() -> Vec<Ide> {
+    let mut found: Vec<Ide> = Vec::new();
+
+    let path_var = std::env::var("PATH").unwrap_or_default();
+    let path_dirs: Vec<PathBuf> = std::env::split_paths(&path_var).collect();
+    for (cmd, name) in LINUX_CMDS {
+        for dir in &path_dirs {
+            let p = dir.join(cmd);
+            if p.is_file() {
+                let path_str = p.to_string_lossy().to_string();
+                if !found.iter().any(|i| i.path == path_str) {
+                    found.push(Ide {
+                        id: gen_id(),
+                        name: name.to_string(),
+                        path: path_str,
+                    });
+                }
+                break;
+            }
+        }
+    }
+
+    if let Some(home) = home_dir() {
+        let scripts = home.join(".local/share/JetBrains/Toolbox/scripts");
+        if let Ok(entries) = fs::read_dir(&scripts) {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if !p.is_file() {
+                    continue;
+                }
+                let stem = p
+                    .file_name()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                if let Some((_, name)) =
+                    LINUX_CMDS.iter().find(|(c, _)| stem.eq_ignore_ascii_case(c))
+                {
+                    let path_str = p.to_string_lossy().to_string();
+                    if !found.iter().any(|i| i.path == path_str) {
+                        found.push(Ide {
+                            id: gen_id(),
+                            name: name.to_string(),
+                            path: path_str,
+                        });
+                    }
+                }
+            }
+        }
+    }
+    found
+}
+
+// ---- Windows: common install locations (rest via manual Add IDE) ----
+#[cfg(target_os = "windows")]
+fn detect_platform_ides() -> Vec<Ide> {
+    let mut found: Vec<Ide> = Vec::new();
+    if let Ok(lad) = std::env::var("LOCALAPPDATA") {
+        for (rel, name) in [
+            ("Programs\\Microsoft VS Code\\Code.exe", "VS Code"),
+            ("Programs\\cursor\\Cursor.exe", "Cursor"),
+        ] {
+            let p = PathBuf::from(&lad).join(rel);
+            if p.is_file() {
+                found.push(Ide {
+                    id: gen_id(),
+                    name: name.to_string(),
+                    path: p.to_string_lossy().to_string(),
+                });
+            }
+        }
+    }
     found
 }
 
@@ -638,11 +744,47 @@ fn open_in_app(app_path: &str, project_path: &str) -> Result<(), String> {
 
 #[cfg(all(unix, not(target_os = "macos")))]
 fn open_in_app(app_path: &str, project_path: &str) -> Result<(), String> {
+    // Try to focus an already-open window (via wmctrl) before launching.
+    if focus_existing_window(app_path, project_path) {
+        return Ok(());
+    }
     Command::new(app_path)
         .arg(project_path)
         .spawn()
         .map(|_| ())
         .map_err(|e| format!("Failed to launch IDE: {e}"))
+}
+
+/// Linux (X11): focus a window whose title contains the project folder name,
+/// using `wmctrl`. Returns false if wmctrl is missing or nothing matched.
+#[cfg(all(unix, not(target_os = "macos")))]
+fn focus_existing_window(_app_path: &str, project_path: &str) -> bool {
+    let name = match Path::new(project_path).file_name() {
+        Some(n) => n.to_string_lossy().to_string(),
+        None => return false,
+    };
+    if name.is_empty() {
+        return false;
+    }
+    let out = match Command::new("wmctrl").arg("-l").output() {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).to_string(),
+        _ => return false,
+    };
+    for line in out.lines() {
+        // Format: <winid> <desktop> <host> <title...>
+        let mut it = line.split_whitespace();
+        let id = it.next();
+        let _desktop = it.next();
+        let _host = it.next();
+        let title = it.collect::<Vec<_>>().join(" ");
+        if title.contains(&name) {
+            if let Some(id) = id {
+                let _ = Command::new("wmctrl").arg("-i").arg("-a").arg(id).status();
+                return true;
+            }
+        }
+    }
+    false
 }
 
 // ------------------------- Open-project detection -------------------------
@@ -655,11 +797,78 @@ fn scan_open_projects(names: Vec<String>) -> std::collections::HashMap<String, S
     {
         scan_open_macos(&names)
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    {
+        scan_open_linux(&names)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         let _ = names;
         std::collections::HashMap::new()
     }
+}
+
+/// Linux (X11): match project names against open IDE window titles via wmctrl.
+#[cfg(target_os = "linux")]
+fn scan_open_linux(names: &[String]) -> std::collections::HashMap<String, String> {
+    use std::collections::HashMap;
+    let mut result = HashMap::new();
+    // `wmctrl -lx`: <winid> <desktop> <wm_class> <host> <title...>
+    let out = match Command::new("wmctrl").arg("-lx").output() {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).to_string(),
+        _ => return result,
+    };
+    let lines: Vec<(String, String)> = out
+        .lines()
+        .filter_map(|l| {
+            let mut it = l.split_whitespace();
+            let _id = it.next()?;
+            let _desktop = it.next()?;
+            let class = it.next()?.to_string();
+            let _host = it.next()?;
+            let title = it.collect::<Vec<_>>().join(" ");
+            Some((class, title))
+        })
+        .collect();
+
+    for name in names {
+        if name.is_empty() {
+            continue;
+        }
+        for (class, title) in &lines {
+            if title.contains(name.as_str()) {
+                result.insert(name.clone(), ide_label_from_class(class));
+                break;
+            }
+        }
+    }
+    result
+}
+
+#[cfg(target_os = "linux")]
+fn ide_label_from_class(class: &str) -> String {
+    let c = class.to_lowercase();
+    let map = [
+        ("phpstorm", "PhpStorm"),
+        ("goland", "GoLand"),
+        ("datagrip", "DataGrip"),
+        ("pycharm", "PyCharm"),
+        ("idea", "IntelliJ IDEA"),
+        ("webstorm", "WebStorm"),
+        ("clion", "CLion"),
+        ("rubymine", "RubyMine"),
+        ("rider", "Rider"),
+        ("rustrover", "RustRover"),
+        ("cursor", "Cursor"),
+        ("code", "VS Code"),
+        ("zed", "Zed"),
+    ];
+    for (k, v) in map {
+        if c.contains(k) {
+            return v.to_string();
+        }
+    }
+    "IDE".to_string()
 }
 
 #[cfg(target_os = "macos")]
@@ -996,4 +1205,106 @@ fn position_under_tray(window: &tauri::WebviewWindow, rect: &tauri::Rect) {
         x: x as i32,
         y: y as i32,
     }));
+}
+
+// ------------------------- Tests -------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::path::Path;
+
+    fn make_repo(base: &Path, rel: &str) {
+        fs::create_dir_all(base.join(rel).join(".git")).unwrap();
+    }
+
+    fn rel_names(root: &Path, repos: &[PathBuf]) -> Vec<String> {
+        repos
+            .iter()
+            .map(|p| {
+                p.strip_prefix(root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/")
+            })
+            .collect()
+    }
+
+    #[test]
+    fn finds_repos_and_does_not_descend_into_them() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        make_repo(root, "pc");
+        make_repo(root, "adapters/foo");
+        make_repo(root, "adapters/bar");
+        // A repo nested inside another repo must NOT be discovered.
+        make_repo(root, "pc/sub/inner");
+
+        let names = rel_names(root, &find_repos(root));
+        assert!(names.contains(&"pc".to_string()));
+        assert!(names.contains(&"adapters/foo".to_string()));
+        assert!(names.contains(&"adapters/bar".to_string()));
+        assert!(!names.iter().any(|n| n.contains("inner")));
+        assert_eq!(names.len(), 3);
+    }
+
+    #[test]
+    fn skips_noise_directories() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        make_repo(root, "node_modules/pkg");
+        make_repo(root, "vendor/lib");
+        make_repo(root, "real");
+
+        let names = rel_names(root, &find_repos(root));
+        assert_eq!(names, vec!["real".to_string()]);
+    }
+
+    #[test]
+    fn builds_grouped_sorted_tree() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        make_repo(root, "adapters/foo");
+        make_repo(root, "adapters/bar");
+        make_repo(root, "pc");
+
+        let tree = build_tree(root, &find_repos(root));
+        assert_eq!(count_repos(&tree), 3);
+
+        // Groups come before repos.
+        assert_eq!(tree.children[0].name, "adapters");
+        assert!(!tree.children[0].is_repo);
+        assert_eq!(tree.children[0].children.len(), 2);
+        // Children are alphabetical.
+        assert_eq!(tree.children[0].children[0].name, "bar");
+        assert_eq!(tree.children[0].children[1].name, "foo");
+
+        let pc = tree.children.iter().find(|c| c.name == "pc").unwrap();
+        assert!(pc.is_repo);
+    }
+
+    #[test]
+    fn ide_name_from_path_extracts_stem() {
+        assert_eq!(ide_name_from_path("/Applications/PhpStorm.app"), "PhpStorm");
+        assert_eq!(
+            ide_name_from_path("/Users/x/Applications/GoLand.app"),
+            "GoLand"
+        );
+    }
+
+    #[test]
+    fn default_shortcut_is_stable() {
+        assert_eq!(default_shortcut(), "CmdOrCtrl+Shift+M");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn process_name_maps_vscode() {
+        assert_eq!(
+            process_name_for("/Applications/Visual Studio Code.app"),
+            "Code"
+        );
+        assert_eq!(process_name_for("/Applications/PhpStorm.app"), "PhpStorm");
+    }
 }
