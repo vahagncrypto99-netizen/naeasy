@@ -6,6 +6,11 @@
 #
 #   ./install.sh            build if needed, then install
 #   ./install.sh --rebuild  force a clean recompile
+#
+# Can also run standalone (no clone needed):
+#   /bin/bash -c "$(curl -fsSL https://gitlab.com/vahagn.crypto.99-group/naeasy/-/raw/main/install.sh)"
+# In that mode the source is fetched into a temporary directory, built,
+# installed, and the temporary directory is removed afterwards.
 
 set -uo pipefail
 cd "$(dirname "$0")"
@@ -75,6 +80,14 @@ else
     "Then run ./install.sh again."
 fi
 
+# 5. git (needed only in standalone mode, to fetch the source)
+if command -v git >/dev/null 2>&1; then
+  ok "git $(git --version | awk '{print $3}')"
+else
+  need_step "git" \
+    "On macOS it ships with the Xcode Command Line Tools:  xcode-select --install"
+fi
+
 if [ "$missing" -gt 0 ]; then
   echo "${BOLD}${RED}Missing tools: $missing.${RESET} Fix the items above and run ${BOLD}./install.sh${RESET} again."
   exit 1
@@ -89,6 +102,18 @@ REBUILD=0
 [ "${1:-}" = "--rebuild" ] && REBUILD=1
 
 set -e
+
+# Standalone mode (curl | bash): no source tree around — fetch it into a
+# temporary directory, build from there, and remove it when the script exits.
+REPO_URL="https://gitlab.com/vahagn.crypto.99-group/naeasy.git"
+if [ ! -f package.json ] || [ ! -d src-tauri ]; then
+  TMP_SRC="$(mktemp -d "${TMPDIR:-/tmp}/naeasy-install.XXXXXX")"
+  trap 'rm -rf "$TMP_SRC"' EXIT
+  echo "▸ Fetching source into a temporary directory ($TMP_SRC)…"
+  git clone --depth 1 "$REPO_URL" "$TMP_SRC/naeasy"
+  cd "$TMP_SRC/naeasy"
+fi
+
 echo "▸ npm install…"
 npm install
 # Always build so the install reflects your latest code. Tauri/Cargo builds
