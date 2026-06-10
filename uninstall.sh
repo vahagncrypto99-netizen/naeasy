@@ -18,8 +18,11 @@ for p in "/Applications/naeasy.app" "$HOME/Applications/naeasy.app"; do
 done
 [ "$removed" = "0" ] && echo "  (no installed bundle found)"
 
-# Disable login-item autostart, if registered.
-rm -f "$HOME/Library/LaunchAgents/com.vahagn.naeasy.plist" >/dev/null 2>&1 || true
+# Disable login-item autostart, if registered (tauri-plugin-autostart names
+# the LaunchAgent after the app: naeasy.plist).
+launchctl bootout "gui/$(id -u)/naeasy" >/dev/null 2>&1 || true
+rm -f "$HOME/Library/LaunchAgents/naeasy.plist" \
+      "$HOME/Library/LaunchAgents/com.vahagn.naeasy.plist" >/dev/null 2>&1 || true
 
 echo
 echo "✓ Uninstalled."
