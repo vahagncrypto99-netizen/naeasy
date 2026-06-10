@@ -64,8 +64,15 @@ if [ -d "$PUBLIC_DIR/.git" ] && [ "$(cd "$PUBLIC_DIR" && pwd)" != "$PWD" ]; then
   cp "dist/naeasy-macos-$VERSION.zip" "$PUBLIC_DIR/bin/"
   cp dist/install.sh "$PUBLIC_DIR/install.sh"
   chmod +x "$PUBLIC_DIR/install.sh"
+  # Linux .debs, if built (scripts/build-linux.sh → dist-linux/).
+  if ls dist-linux/naeasy_"$VERSION"_*.deb >/dev/null 2>&1; then
+    cp dist-linux/naeasy_"$VERSION"_*.deb "$PUBLIC_DIR/bin/"
+    cp scripts/public-install-linux.sh "$PUBLIC_DIR/install-linux.sh"
+    chmod +x "$PUBLIC_DIR/install-linux.sh"
+  fi
   [ -f "$PUBLIC_DIR/README.md" ] || cp dist/README.md "$PUBLIC_DIR/README.md"
   git -C "$PUBLIC_DIR" add bin install.sh README.md
+  [ -f "$PUBLIC_DIR/install-linux.sh" ] && git -C "$PUBLIC_DIR" add install-linux.sh
   if git -C "$PUBLIC_DIR" commit -m "release v$VERSION" >/dev/null; then
     echo "${GREEN}✓ Committed in public repo.${RESET} Push it:"
     echo "    git -C \"$PUBLIC_DIR\" push"
