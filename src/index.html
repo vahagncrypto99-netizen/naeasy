@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>naeasy</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="header" data-tauri-drag-region>
+        <div class="header-left" data-tauri-drag-region>
+          <button id="win-close" class="win-dot" title="Close (Cmd+Shift+M to reopen)"></button>
+          <span class="logo">⌘</span>
+          <span class="title" data-tauri-drag-region>naeasy</span>
+        </div>
+        <div class="header-actions">
+          <button id="rescan" class="icon-btn" title="Rescan all workspaces">⟳</button>
+          <button id="open-settings" class="icon-btn" title="IDEs &amp; settings">⚙</button>
+        </div>
+      </header>
+
+      <div class="toolbar">
+        <input id="search" class="search" type="text" placeholder="Filter projects…" autocomplete="off" />
+        <button id="add-workspace" class="add-btn" title="Add workspace">＋</button>
+      </div>
+
+      <main id="content" class="content">
+        <!-- tree renders here -->
+      </main>
+
+      <footer class="footer">
+        <span id="default-ide-label" class="muted">No IDE</span>
+        <span id="status" class="muted"></span>
+      </footer>
+    </div>
+
+    <!-- Settings / IDE panel -->
+    <div id="settings" class="panel hidden">
+      <div class="panel-head">
+        <button id="settings-back" class="icon-btn">‹</button>
+        <span class="panel-title">IDEs &amp; settings</span>
+      </div>
+      <div class="panel-body">
+        <div class="section-row">
+          <span class="section-label">Editors / IDEs</span>
+          <div>
+            <button id="detect-ides" class="ghost-btn">Auto-detect</button>
+            <button id="add-ide" class="ghost-btn">Add IDE…</button>
+          </div>
+        </div>
+
+        <div class="select-row">
+          <span class="select-label">Default</span>
+          <select id="default-ide-select" class="select"></select>
+        </div>
+
+        <ul id="ide-list" class="ide-list"></ul>
+        <p class="hint">The default IDE is used on a single click. Click the badge on a project to pick a different one.</p>
+
+        <div class="section-row" style="margin-top:16px">
+          <span class="section-label">Global shortcut</span>
+          <button id="shortcut-btn" class="ghost-btn">Cmd+Shift+M</button>
+        </div>
+        <p class="hint">Toggles the window from anywhere. Click, then press your combo (a modifier + one key).</p>
+
+        <div class="section-row" style="margin-top:16px">
+          <span class="section-label">Startup</span>
+          <label class="switch">
+            <input type="checkbox" id="autostart-toggle" />
+            <span>Launch at login</span>
+          </label>
+        </div>
+
+        <div class="section-row" style="margin-top:16px">
+          <span class="section-label">App</span>
+          <button id="quit-app" class="ghost-btn">Quit naeasy</button>
+        </div>
+        <p class="hint">To uninstall: quit the app here (or via the menu-bar icon), then drag naeasy from Applications to the Trash — or run <code>./uninstall.sh</code>.</p>
+      </div>
+    </div>
+
+    <!-- IDE picker popover (per project) -->
+    <div id="ide-picker" class="ide-picker hidden"></div>
+
+    <script type="module" src="main.js"></script>
+  </body>
+</html>

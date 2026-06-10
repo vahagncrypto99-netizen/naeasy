@@ -1,93 +1,164 @@
 # naeasy
 
+A minimal menu-bar navigator for your local Git projects. It lives in the menu bar (like JetBrains Toolbox); a click shows a tree of every project inside the folders you add. Click a project → it opens in your chosen IDE.
 
+Built on **Tauri 2** (Rust + web), with native-app memory usage.
 
-## Getting started
+## Features
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+- **Add workspace** — pick a folder; naeasy recursively finds every `.git` repository and builds a tree (folder → project). It does not descend into repos and skips `node_modules`, `vendor`, `target`, etc.
+- **Click a project** — opens it in the default IDE.
+- **Badge on a project** — a dropdown to open that specific project in a different IDE.
+- **Default IDE** — keep several IDEs; make any of them the default.
+- **Auto-detect** — finds installed PhpStorm, GoLand, DataGrip, PyCharm, IntelliJ, WebStorm, VS Code, Cursor, Zed and more in `/Applications` and `~/Applications` (including JetBrains Toolbox launchers).
+- **Add IDE…** — point to a `.app` manually.
+- Collapsible nodes and a name filter. State and IDE list persist across launches.
+- **Launch at login**, plus a **Quit** button in settings.
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+Config is stored in `~/Library/Application Support/com.vahagn.naeasy/config.json`.
 
-## Add your files
+## Install — one step
 
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+```bash
+cd naeasy
+./install.sh
+```
+
+The script first checks your environment (Xcode CLT, Node.js ≥ 18, npm, Rust). **If something is missing it prints the exact steps for that specific tool and stops.** Fix it, run again. Once everything is present it builds the release, copies `naeasy.app` into `/Applications` and launches it — no manual dragging.
+
+Re-running `./install.sh` reuses the existing build (instant). Force a clean recompile with `./install.sh --rebuild`.
+
+> Note: the very first build compiles Rust on your Mac (a few minutes). A prebuilt binary can't be shipped cross-platform because a macOS `.app` must be built and signed on macOS. Subsequent builds are incremental.
+
+Example output when Rust is missing:
 
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/vahagn.crypto.99-group/naeasy.git
-git branch -M main
-git push -uf origin main
+naeasy — environment check
+
+✓ Xcode Command Line Tools
+✓ Node.js 22.22.0
+✓ npm 10.9.0
+✗ Rust (cargo) — not installed
+      Install rustup:  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+      Load it in this shell:  source "$HOME/.cargo/env"
+      Then run ./install.sh again.
+
+Missing tools: 1. Fix the items above and run ./install.sh again.
 ```
 
-## Integrate with your tools
+### Uninstall
 
-* [Set up project integrations](https://gitlab.com/vahagn.crypto.99-group/naeasy/-/settings/integrations)
+```bash
+./uninstall.sh
+```
 
-## Collaborate with your team
+Quits the running app, disables login-item autostart and removes the bundle. (You can also quit from **⚙ → Quit naeasy** or the menu-bar icon, then drag it to the Trash.)
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+### Launch at login — automatic
 
-## Test and Deploy
+The app registers itself in Login Items via `tauri-plugin-autostart`. It is enabled automatically on first run; toggle it in **⚙ → Launch at login**. No need to touch System Settings.
 
-Use the built-in continuous integration in GitLab.
+### Dev mode (optional)
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+```bash
+npm install
+npm run dev      # hot reload, menu-bar icon
+```
 
-***
+## Troubleshooting / logs
 
-# Editing this README
+The app logs to a file and to stdout (`tauri-plugin-log`).
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+Log file:
 
-## Suggestions for a good README
+```
+~/Library/Logs/com.vahagn.naeasy/naeasy.log
+tail -f ~/Library/Logs/com.vahagn.naeasy/naeasy.log
+```
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+To see a startup crash immediately, run the binary directly from Terminal (any
+Rust panic prints to stderr):
 
-## Name
-Choose a self-explaining name for your project.
+```bash
+/Applications/naeasy.app/Contents/MacOS/naeasy
+# or, if it was installed to the user folder:
+~/Applications/naeasy.app/Contents/MacOS/naeasy
+```
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+You should see lines like `naeasy starting up` and `showing main window on launch`.
+If it exits with a panic, that message is the cause — paste it back.
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+## Open / close / shortcut
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+naeasy is a **menu-bar app — no Dock icon** (like JetBrains Toolbox).
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+**To open / show the window:**
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+- click the **menu-bar icon**, or
+- press the **global shortcut** (default **⌘⇧M**, change it in ⚙ → Global shortcut).
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+**Window buttons** (traffic lights over the header, `titleBarStyle: Overlay`):
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+- **🔴 red** — hides the window (app keeps running; reopen via menu-bar icon or shortcut);
+- **🟡 yellow** — minimize · **🟢 green** — zoom.
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+**To quit completely:** the menu-bar icon's menu → Quit, or **⚙ → Quit naeasy**.
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+> Want it in the Dock / Cmd+Tab instead? Change `ActivationPolicy::Accessory` to `Regular` in `src-tauri/src/lib.rs`.
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+### Project info
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+Each project row shows usage info:
 
-## License
-For open source projects, say how it is licensed.
+- **● IDE** (green) — the project is **open right now** in that IDE;
+- **"3h ago"** — when you **last opened** it from naeasy (and which IDE, on hover).
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+"Open right now" detection reads IDE window titles via AppleScript and needs **Accessibility** permission (System Settings → Privacy & Security → Accessibility → add `naeasy`). Without it, only "last opened" is shown.
+
+### Menu-bar icon not showing?
+
+macOS only shows it if **System Settings → Menu Bar → Allow in Menu Bar → naeasy** is ON *and* the app was launched after enabling it (relaunch if you just toggled it). If it's still missing it's hidden behind the **notch** — too many menu-bar items. A free fixer: `brew install --cask ice`.
+
+## Open behavior (switch, not re-open)
+
+On click, naeasy first checks whether the project is already open in that IDE:
+
+1. **Already open** — switches to its window: un-minimizes (`AXMinimized = false`), raises it (`AXRaise`) and focuses the app. If several projects are open in separate windows, it picks the window whose title contains the project folder name.
+2. **Not open** — runs `open -a "<.app path>" "<project path>"`, opening the folder as a project.
+
+Step 1 uses AppleScript / System Events and needs **Accessibility** permission:
+
+System Settings → Privacy & Security → Accessibility → add `naeasy.app` (or Terminal in dev mode).
+
+> Without that permission step 1 is silently skipped and `open -a` is used — which already focuses an existing project window for JetBrains and VS Code, but may not un-minimize it. For the full behavior (un-minimize + exact window among several projects) grant Accessibility.
+
+Windows/Linux: runs `<ide> <project_path>` directly (for portability; the main target is macOS).
+
+## Custom icon
+
+A polished icon set is already generated in `src-tauri/icons/` (color app icon + a monochrome menu-bar template icon `tray.png`). To replace it, drop your own `icon.png` (1024×1024) and run:
+
+```bash
+npm run tauri icon src-tauri/icons/icon.png
+```
+
+## Structure
+
+```
+naeasy/
+├── install.sh              # one-step build + install with tool checks
+├── uninstall.sh            # quit + remove
+├── package.json            # npm scripts, Tauri CLI/API, dialog + autostart plugins
+├── src/                    # frontend (vanilla HTML/CSS/JS, no bundler)
+│   ├── index.html
+│   ├── styles.css
+│   └── main.js
+└── src-tauri/
+    ├── Cargo.toml
+    ├── tauri.conf.json     # popover window, tray, bundle
+    ├── capabilities/default.json
+    ├── icons/              # app icon set + tray template icon
+    └── src/
+        ├── main.rs
+        └── lib.rs          # scan, IDE detect, focus-or-open, persist, tray
+```
