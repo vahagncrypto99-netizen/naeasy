@@ -1,106 +1,78 @@
-<p align="center">
-  <img src="src-tauri/icons/128x128@2x.png" width="128" alt="naeasy icon">
-</p>
+# naeasy — dev (source)
 
-<h1 align="center">naeasy</h1>
+Private source repository for **naeasy**, a macOS menu-bar launcher for local
+Git projects. Users never see this repo — prebuilt binaries are published to
+the public repo: <https://github.com/vahagncrypto99-netizen/naeasy>
+(see [RELEASE.md](RELEASE.md) for the two-repo release model).
 
-<p align="center">
-  <b>All your Git projects, one keystroke away.</b><br>
-  A featherweight menu-bar launcher: find any local project and open it in your IDE — instantly.
-</p>
+**Stack:** Tauri 2 — Rust backend + vanilla ES-module frontend (no bundler,
+`withGlobalTauri: true`). macOS first; Linux/Windows code paths exist behind
+platform strategies.
 
-<p align="center">
-  <img src="https://img.shields.io/badge/macOS-menu%20bar-black?logo=apple" alt="macOS">
-  <img src="https://img.shields.io/badge/Linux-supported-FCC624?logo=linux&logoColor=black" alt="Linux">
-  <img src="https://img.shields.io/badge/built%20with-Tauri%202-24C8DB?logo=tauri&logoColor=white" alt="Tauri 2">
-  <img src="https://img.shields.io/badge/backend-Rust-orange?logo=rust" alt="Rust">
-</p>
+## Architecture
 
-<!-- screenshot: add docs/screenshot.png and uncomment
-<p align="center">
-  <img src="docs/screenshot.png" width="420" alt="naeasy window">
-</p>
--->
+Clean layered backend (full rationale and SOLID/pattern mapping in
+[ARCHITECTURE.md](ARCHITECTURE.md)):
 
----
-
-You have dozens of projects scattered across workspace folders. Opening one means digging through Finder, a terminal, or your IDE's welcome screen. **naeasy** turns that into:
-
-<p align="center"><code>⌘⇧M</code> → type 3 letters → <code>Enter</code> → your project is open. ✨</p>
-
-Point it at your workspace folders once — it discovers every Git repository inside and keeps them in your menu bar, neatly grouped and searchable.
-
-## Features
-
-- 🔍 **Instant search** — summon with a global hotkey, type a few letters, hit Enter. Spotlight-fast, keyboard-first.
-- 🗂 **Auto-discovery** — recursively finds every Git repo in your folders; new projects appear by themselves.
-- 🚀 **Opens in *your* IDE** — auto-detects JetBrains IDEs, VS Code, Cursor, Zed and more; set a default or pick per project.
-- 🪟 **Switches, never duplicates** — if a project is already open, naeasy focuses its existing window instead of opening a copy.
-- 🟢 **Live status** — see which projects are open right now and when you last touched each one; recent ones float to the top.
-- 🫥 **Stays out of the way** — lives in the menu bar, no Dock icon, starts at login.
-
-## Lightweight, really
-
-No Electron inside. naeasy is a native **Rust** binary with the system webview (**Tauri 2**):
-
-|  | naeasy |
-|---|---|
-| Disk size | ~4 MB |
-| Memory | native-app footprint |
-| Runtime deps | none |
-
-## Install
-
-One command — paste it into Terminal:
-
-```bash
-/bin/bash -c "$(curl -fsSL https://gitlab.com/vahagn.crypto.99-group/naeasy/-/raw/main/install.sh)"
+```
+src-tauri/src/
+├── lib.rs                  # composition root: DI wiring + command registration ONLY
+├── domain/                 # pure logic — no I/O, no Tauri, no OS, unit-tested
+│   ├── models.rs           #   Workspace, Ide, Config, Recent, TreeNode, AppData…
+│   └── tree.rs             #   find_repos / build_tree / build_app_data (+ tests)
+├── infra/                  # adapters to the outside world
+│   ├── config_repository.rs#   ConfigRepository trait + JsonConfigRepository
+│   ├── ide_detector.rs     #   IdeDetector trait + Mac/Linux/Windows strategies
+│   ├── project_launcher.rs #   ProjectLauncher trait + per-OS strategies
+│   └── shortcut.rs         #   ShortcutService (global hotkey registration)
+├── app/                    # use-cases / orchestration
+│   ├── workspace_service.rs#   WorkspaceService facade (+ tests vs fake repo)
+│   └── state.rs            #   AppState { service } — Tauri-managed
+└── ui/                     # Tauri glue, thin
+    ├── commands.rs         #   13 #[tauri::command] handlers → service calls
+    └── tray.rs             #   tray icon, window show/hide/position
 ```
 
-What it does:
+Key rules the structure enforces:
 
-1. Checks your tools (Xcode CLT, Node.js ≥ 18, Rust, git) — if something is missing, it prints the exact command to fix it and stops.
-2. Downloads the source into a **temporary directory**.
-3. Builds `naeasy.app` (the first build compiles Rust — a few minutes), installs it into `/Applications` and launches it.
-4. Deletes the temporary directory — nothing is left behind except the app itself.
+- **Dependency direction:** `ui → app → infra-traits/domain`; concrete infra
+  impls are injected once in `lib.rs::run()` (`Arc<dyn Trait>`).
+- **Platform code** lives only inside `infra/` impls; `#[cfg(target_os)]`
+  never appears in domain/app/ui. Adding an OS = new strategy impl.
+- **IPC contract is frozen** in `ui/commands.rs`: command names and JSON
+  shapes are what the frontend (and any future client) depends on.
+- **Config** is JSON at `~/Library/Application Support/com.vahagn.naeasy/`,
+  abstracted by `ConfigRepository` — services are tested against an in-memory
+  fake (`cargo test`, 15 tests).
 
-<details>
-<summary>Installing from a clone (for development)</summary>
+Frontend mirrors the same idea (`src/js/`): `api.js` is the **only** module
+touching `window.__TAURI__`; `store.js` holds state; `tree.js` / `recents.js`
+/ `settings.js` / `shortcuts.js` split rendering and input; `main.js` is the
+bootstrap that wires them; `dom.js` — shared helpers.
 
-```bash
-git clone https://gitlab.com/vahagn.crypto.99-group/naeasy.git
-cd naeasy
-./install.sh        # builds incrementally on re-runs; --rebuild for a clean build
-```
-
-On Linux: `./install-linux.sh`.
-
-</details>
-
-> 💡 For "open right now" detection and window switching, grant Accessibility permission: **System Settings → Privacy & Security → Accessibility → naeasy**.
-
-## Uninstall
-
-Also one command, from anywhere — no clone needed:
+## Develop
 
 ```bash
-/bin/bash -c "$(curl -fsSL https://gitlab.com/vahagn.crypto.99-group/naeasy/-/raw/main/uninstall.sh)"
+cd src-tauri && cargo build     # compile backend
+cd src-tauri && cargo test      # domain + service unit tests
+npm run dev                     # hot-reload dev app
+./install.sh                    # local release build → /Applications (incremental)
 ```
 
-It quits the running app, removes `naeasy.app` from `/Applications` (and `~/Applications`), and disables the login item.
-
-Your settings are kept in case you reinstall. To wipe them too:
+## Release
 
 ```bash
-rm -rf "$HOME/Library/Application Support/com.vahagn.naeasy"
+./release.sh 0.2.0              # bump version, build, copy zip into ../naeasy/bin,
+                                # refresh installer, commit in the public repo
+git -C ../naeasy push           # publish
 ```
 
----
+Old versions stay in the public `bin/`; the public `install.sh` always
+installs the newest (`sort -V`). Details: [RELEASE.md](RELEASE.md).
 
-<p align="center">
-  <sub>
-    open any project in seconds · switch between projects instantly · all your git projects in one place ·
-    stop digging through folders for that one repo · manage dozens of repositories without chaos ·
-    pick up where you left off · your recent work always at hand · one shortcut instead of Finder, terminal and welcome screens
-  </sub>
-</p>
+## More docs
+
+- [ARCHITECTURE.md](ARCHITECTURE.md) — target architecture, patterns, the
+  completed migration plan
+- [RELEASE.md](RELEASE.md) — private-source / public-binary release model
+- `openspec/` — spec-driven change history (local only, not pushed)
