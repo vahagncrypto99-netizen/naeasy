@@ -1,7 +1,26 @@
 {
   "name": "naeasy",
   "version": "0.1.0",
-  "description": "Minimal menu-bar navigator for your local Git projects",
+  "description": "Featherweight menu-bar launcher for your local Git projects — find any project and open it in your IDE with one keystroke",
+  "keywords": [
+    "project-launcher",
+    "project-switcher",
+    "menu-bar",
+    "menubar-app",
+    "tray-app",
+    "git-projects",
+    "ide-launcher",
+    "quick-open",
+    "developer-tools",
+    "productivity",
+    "jetbrains-toolbox-alternative",
+    "spotlight",
+    "workspace-manager",
+    "tauri",
+    "rust",
+    "macos",
+    "linux"
+  ],
   "type": "module",
   "scripts": {
     "tauri": "tauri",

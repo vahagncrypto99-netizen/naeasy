@@ -45,7 +45,7 @@ No Electron inside. naeasy is a native **Rust** binary with the system webview (
 
 |  | naeasy |
 |---|---|
-| Disk size | ~6 MB |
+| Disk size | ~4 MB |
 | Memory | native-app footprint |
 | Runtime deps | none |
 
@@ -94,3 +94,13 @@ Your settings are kept in case you reinstall. To wipe them too:
 ```bash
 rm -rf "$HOME/Library/Application Support/com.vahagn.naeasy"
 ```
+
+---
+
+<p align="center">
+  <sub>
+    project launcher · project switcher · git repository manager · menu bar app · tray app ·
+    quick open · IDE launcher · JetBrains Toolbox alternative · Spotlight for projects ·
+    workspace manager · developer productivity · Tauri · Rust · macOS · Linux
+  </sub>
+</p>
