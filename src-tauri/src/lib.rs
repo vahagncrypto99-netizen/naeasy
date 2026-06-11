@@ -77,11 +77,19 @@ pub fn run() {
             ui::tray::setup(app)?;
 
             // The popover must follow the user across Spaces: without
-            // canJoinAllSpaces macOS switches to the Space that owns the
-            // window on every show. Config sets it too; enforce at runtime.
+            // CanJoinAllSpaces macOS switches to the Space that owns the
+            // window on every show, and without FullScreenAuxiliary it yanks
+            // the user out of fullscreen apps (Tauri only exposes the former,
+            // so set the combination straight on the NSWindow).
+            #[cfg(target_os = "macos")]
             if let Some(w) = app.get_webview_window("main") {
-                if let Err(e) = w.set_visible_on_all_workspaces(true) {
-                    log::warn!("visible-on-all-workspaces not applied: {e}");
+                use objc2_app_kit::{NSWindow, NSWindowCollectionBehavior};
+                if let Ok(ptr) = w.ns_window() {
+                    let ns_window = unsafe { &*(ptr as *const NSWindow) };
+                    ns_window.setCollectionBehavior(
+                        NSWindowCollectionBehavior::CanJoinAllSpaces
+                            | NSWindowCollectionBehavior::FullScreenAuxiliary,
+                    );
                 }
             }
 
