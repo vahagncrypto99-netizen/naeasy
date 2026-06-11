@@ -76,6 +76,15 @@ pub fn run() {
             // Build the tray icon (menu-bar entry).
             ui::tray::setup(app)?;
 
+            // The popover must follow the user across Spaces: without
+            // canJoinAllSpaces macOS switches to the Space that owns the
+            // window on every show. Config sets it too; enforce at runtime.
+            if let Some(w) = app.get_webview_window("main") {
+                if let Err(e) = w.set_visible_on_all_workspaces(true) {
+                    log::warn!("visible-on-all-workspaces not applied: {e}");
+                }
+            }
+
             // Show the window on first launch so the app is visibly "there".
             log::info!("showing main window on launch");
             ui::tray::show_main(app.handle());
