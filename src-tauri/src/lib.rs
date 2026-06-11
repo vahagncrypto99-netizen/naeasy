@@ -79,19 +79,11 @@ pub fn run() {
             // The popover must follow the user across Spaces: without
             // CanJoinAllSpaces macOS switches to the Space that owns the
             // window on every show, and without FullScreenAuxiliary it yanks
-            // the user out of fullscreen apps (Tauri only exposes the former,
-            // so set the combination straight on the NSWindow).
-            #[cfg(target_os = "macos")]
-            if let Some(w) = app.get_webview_window("main") {
-                use objc2_app_kit::{NSWindow, NSWindowCollectionBehavior};
-                if let Ok(ptr) = w.ns_window() {
-                    let ns_window = unsafe { &*(ptr as *const NSWindow) };
-                    ns_window.setCollectionBehavior(
-                        NSWindowCollectionBehavior::CanJoinAllSpaces
-                            | NSWindowCollectionBehavior::FullScreenAuxiliary,
-                    );
-                }
-            }
+            // the user out of fullscreen apps. Tauri exposes neither combo —
+            // and the process also has a helper TaoWindow pinned to the
+            // launch Space that anchors app activation, so the flags must go
+            // on EVERY normal-level window, not just "main".
+            ui::tray::make_windows_join_all_spaces(app.handle());
 
             // Show the window on first launch so the app is visibly "there".
             log::info!("showing main window on launch");

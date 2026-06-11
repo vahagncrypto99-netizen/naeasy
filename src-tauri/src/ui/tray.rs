@@ -2,6 +2,43 @@
 
 use tauri::Manager;
 
+/// Make every normal-level window of the app join all Spaces and fullscreen
+/// Spaces (the status-bar window and other high-level windows are left
+/// alone). Without this the helper TaoWindow stays pinned to the launch Space
+/// and macOS switches to it whenever the app is activated. The webview's own
+/// NSWindow registers in `NSApp.windows` late, so this is re-applied on every
+/// show — it's a handful of cheap setter calls.
+#[cfg(target_os = "macos")]
+pub fn make_windows_join_all_spaces(app: &tauri::AppHandle) {
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::{NSApplication, NSWindow, NSWindowCollectionBehavior};
+
+    const BEHAVIOR: NSWindowCollectionBehavior = NSWindowCollectionBehavior(
+        NSWindowCollectionBehavior::CanJoinAllSpaces.0
+            | NSWindowCollectionBehavior::FullScreenAuxiliary.0,
+    );
+
+    // The main webview window — via its handle (always reachable).
+    if let Some(w) = app.get_webview_window("main") {
+        if let Ok(ptr) = w.ns_window() {
+            let ns_window = unsafe { &*(ptr as *const NSWindow) };
+            ns_window.setCollectionBehavior(BEHAVIOR);
+        }
+    }
+    // Every other registered normal-level window (e.g. the helper TaoWindow).
+    if let Some(mtm) = MainThreadMarker::new() {
+        let ns_app = NSApplication::sharedApplication(mtm);
+        for w in ns_app.windows().iter() {
+            if w.level() == 0 {
+                w.setCollectionBehavior(BEHAVIOR);
+            }
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn make_windows_join_all_spaces(_app: &tauri::AppHandle) {}
+
 /// Toggle the main window from the global hotkey.
 pub fn toggle_main(app: &tauri::AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
@@ -10,6 +47,7 @@ pub fn toggle_main(app: &tauri::AppHandle) {
         if visible && !minimized {
             let _ = w.hide();
         } else {
+            make_windows_join_all_spaces(app);
             let _ = w.unminimize();
             let _ = w.show();
             let _ = w.set_focus();
@@ -20,6 +58,7 @@ pub fn toggle_main(app: &tauri::AppHandle) {
 /// Show, un-minimize and focus the main window.
 pub fn show_main(app: &tauri::AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
+        make_windows_join_all_spaces(app);
         let _ = w.show();
         let _ = w.unminimize();
         let _ = w.set_focus();

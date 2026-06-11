@@ -2261,6 +2261,7 @@ name = "naeasy"
 version = "0.2.0"
 dependencies = [
  "log",
+ "objc2",
  "objc2-app-kit",
  "serde",
  "serde_json",
