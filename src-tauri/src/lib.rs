@@ -91,7 +91,7 @@ pub fn run() {
             #[allow(deprecated)] // the plugin's API still takes the cocoa type
             {
                 use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
-                use tauri_nspanel::WebviewWindowExt as _;
+                use tauri_nspanel::{panel_delegate, WebviewWindowExt as _};
 
                 let w = app
                     .get_webview_window("main")
@@ -105,6 +105,38 @@ pub fn run() {
                     NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces
                         | NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary,
                 );
+
+                // Spotlight behavior: hide when the panel loses keyboard focus
+                // (click outside, app switch). A floating non-activating panel
+                // never hides by itself otherwise. Exception: focus moving to
+                // another window of OUR app (folder-picker dialog) must not
+                // close the popover — hence the delayed keyWindow check.
+                let delegate = panel_delegate!(NaeasyPanelDelegate {
+                    window_did_resign_key
+                });
+                let handle = app.handle().clone();
+                delegate.set_listener(Box::new(move |name: String| {
+                    if name != "window_did_resign_key" {
+                        return;
+                    }
+                    let handle = handle.clone();
+                    std::thread::spawn(move || {
+                        std::thread::sleep(std::time::Duration::from_millis(150));
+                        let h = handle.clone();
+                        let _ = handle.run_on_main_thread(move || {
+                            use objc2::MainThreadMarker;
+                            use objc2_app_kit::NSApplication;
+                            let Some(mtm) = MainThreadMarker::new() else {
+                                return;
+                            };
+                            let ns_app = NSApplication::sharedApplication(mtm);
+                            if ns_app.keyWindow().is_none() {
+                                ui::tray::hide_main(&h);
+                            }
+                        });
+                    });
+                }));
+                panel.set_delegate(delegate);
             }
             // Belt-and-suspenders for the helper TaoWindow (pinned to the
             // launch Space otherwise).
