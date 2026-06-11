@@ -164,10 +164,11 @@ fn applescript_quote(s: &str) -> String {
 }
 
 /// Poll the IDE for up to ~12s; as soon as it has more than one window, click
-/// Window → "Merge All Windows" so projects become native macOS tabs.
-/// Best-effort: needs Accessibility (already required for focus/scan) and an
-/// IDE that exposes that menu item (JetBrains family does; Electron-based
-/// editors like VS Code don't — for those this is a silent no-op).
+/// the merge action in its Window menu so projects become native macOS tabs.
+/// JetBrains IDEs name it "Merge All Project Windows" (2024.2+); standard
+/// AppKit apps (incl. VS Code with `window.nativeTabs`) — "Merge All Windows".
+/// Best-effort: needs Accessibility (already required for focus/scan); a
+/// silent no-op for IDEs that have neither menu item.
 #[cfg(target_os = "macos")]
 fn merge_windows_when_ready(proc_name: &str) {
     use std::process::Command;
@@ -180,6 +181,10 @@ fn merge_windows_when_ready(proc_name: &str) {
     if not (exists (process {app})) then return "SKIP"
     tell process {app}
         if (count of windows) < 2 then return "SKIP"
+        try
+            click menu item "Merge All Project Windows" of menu "Window" of menu bar item "Window" of menu bar 1
+            return "MERGED"
+        end try
         try
             click menu item "Merge All Windows" of menu "Window" of menu bar item "Window" of menu bar 1
             return "MERGED"

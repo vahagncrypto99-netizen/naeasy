@@ -24,7 +24,8 @@
         "visible": true,
         "skipTaskbar": true,
         "shadow": true,
-        "center": true
+        "center": true,
+        "visibleOnAllWorkspaces": true
       }
     ],
     "security": {
