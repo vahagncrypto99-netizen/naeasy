@@ -16,7 +16,14 @@ use infra::config_repository::{ConfigRepository, JsonConfigRepository};
 use infra::shortcut::ShortcutService;
 
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    // NSPanel support: a non-activating panel gets keyboard focus without
+    // activating the app, so macOS never switches Spaces to "follow" it —
+    // the Spotlight/Raycast approach.
+    #[cfg(target_os = "macos")]
+    let builder = builder.plugin(tauri_nspanel::init());
+
+    builder
         .plugin(
             tauri_plugin_log::Builder::new()
                 .level(log::LevelFilter::Info)
@@ -76,13 +83,31 @@ pub fn run() {
             // Build the tray icon (menu-bar entry).
             ui::tray::setup(app)?;
 
-            // The popover must follow the user across Spaces: without
-            // CanJoinAllSpaces macOS switches to the Space that owns the
-            // window on every show, and without FullScreenAuxiliary it yanks
-            // the user out of fullscreen apps. Tauri exposes neither combo —
-            // and the process also has a helper TaoWindow pinned to the
-            // launch Space that anchors app activation, so the flags must go
-            // on EVERY normal-level window, not just "main".
+            // Turn the main window into a Spotlight-style NSPanel: floating,
+            // non-activating (keyboard without app activation — so macOS has
+            // no reason to switch Spaces), visible on all Spaces including
+            // fullscreen ones.
+            #[cfg(target_os = "macos")]
+            #[allow(deprecated)] // the plugin's API still takes the cocoa type
+            {
+                use tauri_nspanel::cocoa::appkit::NSWindowCollectionBehavior;
+                use tauri_nspanel::WebviewWindowExt as _;
+
+                let w = app
+                    .get_webview_window("main")
+                    .expect("main window must exist");
+                let panel = w.to_panel().expect("failed to convert window to panel");
+                // NSFloatingWindowLevel — above normal windows, like Spotlight.
+                panel.set_level(4);
+                // NSWindowStyleMaskNonActivatingPanel
+                panel.set_style_mask(1 << 7);
+                panel.set_collection_behaviour(
+                    NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces
+                        | NSWindowCollectionBehavior::NSWindowCollectionBehaviorFullScreenAuxiliary,
+                );
+            }
+            // Belt-and-suspenders for the helper TaoWindow (pinned to the
+            // launch Space otherwise).
             ui::tray::make_windows_join_all_spaces(app.handle());
 
             // Show the window on first launch so the app is visibly "there".

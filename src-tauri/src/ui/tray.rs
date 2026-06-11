@@ -39,8 +39,38 @@ pub fn make_windows_join_all_spaces(app: &tauri::AppHandle) {
 #[cfg(not(target_os = "macos"))]
 pub fn make_windows_join_all_spaces(_app: &tauri::AppHandle) {}
 
+/// Hide the main window (panel-aware).
+pub fn hide_main(app: &tauri::AppHandle) {
+    #[cfg(target_os = "macos")]
+    {
+        use tauri_nspanel::ManagerExt as _;
+        if let Ok(panel) = app.get_webview_panel("main") {
+            panel.order_out(None);
+            return;
+        }
+    }
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.hide();
+    }
+}
+
 /// Toggle the main window from the global hotkey.
 pub fn toggle_main(app: &tauri::AppHandle) {
+    // macOS: drive the NSPanel directly — `show()` makes it key WITHOUT
+    // activating the app, so the current Space stays put.
+    #[cfg(target_os = "macos")]
+    {
+        use tauri_nspanel::ManagerExt as _;
+        if let Ok(panel) = app.get_webview_panel("main") {
+            if panel.is_visible() {
+                panel.order_out(None);
+            } else {
+                make_windows_join_all_spaces(app);
+                panel.show();
+            }
+            return;
+        }
+    }
     if let Some(w) = app.get_webview_window("main") {
         let minimized = w.is_minimized().unwrap_or(false);
         let visible = w.is_visible().unwrap_or(false);
@@ -57,6 +87,15 @@ pub fn toggle_main(app: &tauri::AppHandle) {
 
 /// Show, un-minimize and focus the main window.
 pub fn show_main(app: &tauri::AppHandle) {
+    #[cfg(target_os = "macos")]
+    {
+        use tauri_nspanel::ManagerExt as _;
+        if let Ok(panel) = app.get_webview_panel("main") {
+            make_windows_join_all_spaces(app);
+            panel.show();
+            return;
+        }
+    }
     if let Some(w) = app.get_webview_window("main") {
         make_windows_join_all_spaces(app);
         let _ = w.show();
@@ -108,12 +147,10 @@ pub fn setup(app: &tauri::App) -> tauri::Result<()> {
                     let visible = window.is_visible().unwrap_or(false);
                     log::info!("tray clicked; window visible = {visible}");
                     if visible {
-                        let _ = window.hide();
+                        hide_main(app);
                     } else {
                         position_under_tray(&window, &rect);
-                        let _ = window.show();
-                        let _ = window.unminimize();
-                        let _ = window.set_focus();
+                        show_main(app);
                     }
                 }
             }
