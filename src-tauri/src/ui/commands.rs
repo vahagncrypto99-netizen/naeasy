@@ -132,6 +132,13 @@ pub fn set_shortcut(
     state.service.set_shortcut(accel)
 }
 
+/// Hide the popover (used by the frontend after opening a project) — goes
+/// through the single hide path so transient UI gets reset without flashes.
+#[tauri::command]
+pub fn hide_window(app: tauri::AppHandle) {
+    super::tray::hide_main(&app);
+}
+
 /// Quit the whole app (called from the UI "Quit" button).
 #[tauri::command]
 pub fn quit_app(app: tauri::AppHandle) {

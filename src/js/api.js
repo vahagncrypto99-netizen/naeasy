@@ -32,17 +32,23 @@ export const quitApp = () => invoke("quit_app");
 export const pickDirectory = (options) =>
   openDialog({ directory: true, multiple: false, ...options });
 
-/// Hide the main window (Spotlight-like: opening a project tucks naeasy away).
+/// Hide the main window (Spotlight-like: opening a project tucks naeasy
+/// away). Goes through the backend's single hide path so transient UI is
+/// reset while the window is invisible.
 export function hideWindow() {
-  if (getCurrentWindow) {
-    try {
-      getCurrentWindow().hide();
-    } catch {}
-  }
+  invoke("hide_window").catch(() => {
+    if (getCurrentWindow) {
+      try {
+        getCurrentWindow().hide();
+      } catch {}
+    }
+  });
 }
 
 /// Fires every time the popover window is shown (hotkey, tray, dock reopen).
 export const onShown = (cb) => window.__TAURI__.event.listen("naeasy://shown", cb);
+/// Fires right after the window hides — reset transient UI invisibly.
+export const onHidden = (cb) => window.__TAURI__.event.listen("naeasy://hidden", cb);
 
 export const autostart = {
   available: !!autostartPlugin,

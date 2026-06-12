@@ -122,13 +122,16 @@ initTree({
 initSettings({ refresh, applyState });
 initKeyboard({ openProject });
 
-// Every show starts from a clean slate: the tree, not a leftover settings
-// panel or popover from the previous session.
-api.onShown(() => {
+// Transient UI (settings panel, popovers) is reset the moment the window
+// HIDES — while invisible, so the next show never flashes a stale panel.
+// The shown-reset stays as a safety net (no-op when already clean).
+const resetTransientUi = () => {
   closeSettings();
   hideIdePicker();
   hideFastStart();
-});
+};
+api.onHidden(resetTransientUi);
+api.onShown(resetTransientUi);
 
 $("#add-workspace").addEventListener("click", addWorkspace);
 $("#rescan").addEventListener("click", () => {

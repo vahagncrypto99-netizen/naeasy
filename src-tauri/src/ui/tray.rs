@@ -8,6 +8,12 @@ fn emit_shown(app: &tauri::AppHandle) {
     let _ = app.emit("naeasy://shown", ());
 }
 
+/// Emitted right after the window hides; the frontend resets transient UI
+/// while invisible, so the next show never flashes a stale settings panel.
+fn emit_hidden(app: &tauri::AppHandle) {
+    let _ = app.emit("naeasy://hidden", ());
+}
+
 /// Make every normal-level window of the app join all Spaces and fullscreen
 /// Spaces (the status-bar window and other high-level windows are left
 /// alone). Without this the helper TaoWindow stays pinned to the launch Space
@@ -58,18 +64,21 @@ fn position_main_under_tray(app: &tauri::AppHandle) {
     }
 }
 
-/// Hide the main window (panel-aware).
+/// Hide the main window (panel-aware). The single hide path for every
+/// trigger — hotkey toggle, tray click, auto-hide, frontend, close button.
 pub fn hide_main(app: &tauri::AppHandle) {
     #[cfg(target_os = "macos")]
     {
         use tauri_nspanel::ManagerExt as _;
         if let Ok(panel) = app.get_webview_panel("main") {
             panel.order_out(None);
+            emit_hidden(app);
             return;
         }
     }
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.hide();
+        emit_hidden(app);
     }
 }
 
@@ -82,7 +91,7 @@ pub fn toggle_main(app: &tauri::AppHandle) {
         use tauri_nspanel::ManagerExt as _;
         if let Ok(panel) = app.get_webview_panel("main") {
             if panel.is_visible() {
-                panel.order_out(None);
+                hide_main(app);
             } else {
                 make_windows_join_all_spaces(app);
                 position_main_under_tray(app);
@@ -96,7 +105,7 @@ pub fn toggle_main(app: &tauri::AppHandle) {
         let minimized = w.is_minimized().unwrap_or(false);
         let visible = w.is_visible().unwrap_or(false);
         if visible && !minimized {
-            let _ = w.hide();
+            hide_main(app);
         } else {
             make_windows_join_all_spaces(app);
             position_main_under_tray(app);

@@ -185,7 +185,8 @@ pub fn run() {
             ui::commands::fast_start,
             ui::commands::add_base_branch,
             ui::commands::remove_base_branch,
-            ui::commands::set_default_base_branch
+            ui::commands::set_default_base_branch,
+            ui::commands::hide_window
         ])
         .on_window_event(|window, event| {
             // The red close button hides the window instead of quitting, so the
@@ -193,7 +194,7 @@ pub fn run() {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == "main" {
                     api.prevent_close();
-                    let _ = window.hide();
+                    ui::tray::hide_main(window.app_handle());
                 }
             }
         })
