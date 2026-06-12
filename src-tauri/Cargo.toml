@@ -4,6 +4,7 @@ version = "1.1.0"
 description = "Minimal menu-bar navigator for your local Git projects"
 authors = ["Vahagn"]
 edition = "2021"
+license = "MIT"
 rust-version = "1.77.2"
 
 [lib]
