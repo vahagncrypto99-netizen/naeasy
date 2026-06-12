@@ -54,13 +54,17 @@ echo "${GREEN}✓ dist/ ready:${RESET}"
 ls -1 dist
 
 # Publish into the local checkout of the PUBLIC binary repo (bin/ layout).
-# Old versions are kept — each release just adds a new zip to bin/.
+# Single-version model: bin/ holds only the latest release (since v1.0.0);
+# git history keeps the older artifacts if ever needed.
 # Guard against pointing at this (dev) repo itself.
 PUBLIC_DIR="${PUBLIC_DIR:-$(dirname "$PWD")/naeasy}"
 if [ -d "$PUBLIC_DIR/.git" ] && [ "$(cd "$PUBLIC_DIR" && pwd)" != "$PWD" ]; then
   echo
   echo "▸ Publishing v$VERSION into $PUBLIC_DIR"
   mkdir -p "$PUBLIC_DIR/bin"
+  # Drop previous versions — installers always pick the newest anyway.
+  find "$PUBLIC_DIR/bin" \( -name "naeasy-macos-*.zip" -o -name "naeasy_*.deb" \) \
+    ! -name "*$VERSION*" -delete
   cp "dist/naeasy-macos-$VERSION.zip" "$PUBLIC_DIR/bin/"
   cp dist/install.sh "$PUBLIC_DIR/install.sh"
   chmod +x "$PUBLIC_DIR/install.sh"
