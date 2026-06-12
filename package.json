@@ -1,7 +1,7 @@
 {
   "name": "naeasy",
-  "version": "1.1.0",
-  "description": "Featherweight menu-bar launcher for your local Git projects \u2014 find any project and open it in your IDE with one keystroke",
+  "version": "1.1.1",
+  "description": "Featherweight menu-bar launcher for your local Git projects — find any project and open it in your IDE with one keystroke",
   "keywords": [
     "open-projects-fast",
     "quick-access-to-projects",
