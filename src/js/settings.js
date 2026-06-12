@@ -90,9 +90,21 @@ export async function initAutostart() {
 
 // ------------------------- Event wiring -------------------------
 
+/// The tree must not shine through the translucent settings panel — hide it
+/// while settings are open (the glass then shows the desktop, not our DOM).
+export function closeSettings() {
+  $("#settings").classList.add("hidden");
+  document.body.classList.remove("settings-open");
+}
+
+function openSettings() {
+  $("#settings").classList.remove("hidden");
+  document.body.classList.add("settings-open");
+}
+
 export function initSettings({ refresh, applyState }) {
-  $("#open-settings").addEventListener("click", () => $("#settings").classList.remove("hidden"));
-  $("#settings-back").addEventListener("click", () => $("#settings").classList.add("hidden"));
+  $("#open-settings").addEventListener("click", openSettings);
+  $("#settings-back").addEventListener("click", closeSettings);
   $("#detect-ides").addEventListener("click", () => refresh(() => api.detectIdes()));
   $("#quit-app").addEventListener("click", () => api.quitApp());
 

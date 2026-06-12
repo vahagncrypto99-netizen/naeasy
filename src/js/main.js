@@ -22,8 +22,6 @@ function applyState(data) {
   store.state = data;
   if (!store.state.recents) store.state.recents = {};
   if (!store.state.project_ides) store.state.project_ides = {};
-  const def = ideName(store.state.default_ide_id);
-  $("#default-ide-label").textContent = def ? `Default: ${def}` : "No IDE";
   $("#shortcut-btn").textContent = prettyAccel(store.state.shortcut);
   $("#tabs-toggle").checked = !!store.state.open_in_tabs;
   render();

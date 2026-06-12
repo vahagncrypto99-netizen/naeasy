@@ -4,6 +4,7 @@
 import { $ } from "./dom.js";
 import { store } from "./store.js";
 import { render, moveSelection, hideIdePicker, hideFastStart } from "./tree.js";
+import { closeSettings } from "./settings.js";
 
 export function initKeyboard({ openProject }) {
   $("#search").addEventListener("input", (e) => {
@@ -57,9 +58,7 @@ export function initKeyboard({ openProject }) {
     if (e.key === "Escape") {
       hideIdePicker();
       hideFastStart();
-      if (!$("#settings").classList.contains("hidden")) {
-        $("#settings").classList.add("hidden");
-      }
+      closeSettings();
     }
   });
 }

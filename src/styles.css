@@ -124,9 +124,9 @@ body {
   background: transparent;
   border: none;
   color: var(--muted);
-  font-size: 14px;
-  width: 26px;
-  height: 26px;
+  font-size: 17px;
+  width: 30px;
+  height: 30px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background 0.12s ease, color 0.12s ease;
@@ -366,24 +366,32 @@ body {
   margin-top: 14px;
 }
 
-/* Footer — like the widget's bottom action row */
+/* Footer — a transient status toast, hidden when empty */
 .footer {
-  display: flex;
-  justify-content: space-between;
+  display: none;
+  justify-content: center;
   align-items: center;
   padding: 8px 14px;
   border-top: 1px solid var(--line-soft);
   font-size: 11px;
 }
+.footer.visible {
+  display: flex;
+}
 .muted {
   color: var(--muted);
 }
 
-/* Settings panel */
+/* Settings panel. The tree is hidden while it's open (body.settings-open) so
+   nothing shines through the translucent panel — only the window glass. */
+body.settings-open .app {
+  visibility: hidden;
+}
 .panel {
   position: absolute;
   inset: 0;
   background: var(--bg-panel);
+  border-radius: 16px;
   display: flex;
   flex-direction: column;
 }
