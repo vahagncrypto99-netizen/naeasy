@@ -20,6 +20,47 @@
     "Segoe UI", sans-serif;
 }
 
+/* Light theme — follows the OS appearance automatically. */
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f5f1ec;
+    --bg-soft: #efe9e2;
+    --bg-elev: #ffffff;
+    --bg-hover: #e9e2d9;
+    --line: #ddd4c9;
+    --line-soft: #e6dfd5;
+    --text: #2a2420;
+    --text-dim: #4e453d;
+    --muted: #8a8076;
+    --accent: #c4663f;
+    --accent-hover: #d97757;
+    --accent-press: #a85431;
+    --accent-soft: rgba(196, 102, 63, 0.12);
+    --on-accent: #fff7f2;
+  }
+}
+
+/* macOS: translucent surfaces over the native vibrancy material, so the
+   window looks like a system menu/widget. Solid colors elsewhere (Linux). */
+body.mac {
+  --bg: rgba(28, 25, 23, 0.55);
+  --bg-soft: rgba(40, 36, 32, 0.45);
+  --bg-elev: rgba(46, 42, 37, 0.72);
+  --bg-hover: rgba(63, 57, 50, 0.55);
+  --line: rgba(255, 255, 255, 0.09);
+  --line-soft: rgba(255, 255, 255, 0.06);
+}
+@media (prefers-color-scheme: light) {
+  body.mac {
+    --bg: rgba(248, 245, 240, 0.55);
+    --bg-soft: rgba(255, 255, 255, 0.4);
+    --bg-elev: rgba(255, 255, 255, 0.75);
+    --bg-hover: rgba(0, 0, 0, 0.06);
+    --line: rgba(0, 0, 0, 0.1);
+    --line-soft: rgba(0, 0, 0, 0.06);
+  }
+}
+
 * {
   box-sizing: border-box;
 }

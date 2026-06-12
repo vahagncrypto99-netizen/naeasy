@@ -13,6 +13,11 @@ import {
 } from "./settings.js";
 import { initKeyboard } from "./shortcuts.js";
 
+// macOS gets translucent surfaces over the native vibrancy material.
+if (navigator.userAgent.includes("Mac")) {
+  document.body.classList.add("mac");
+}
+
 function applyState(data) {
   store.state = data;
   if (!store.state.recents) store.state.recents = {};

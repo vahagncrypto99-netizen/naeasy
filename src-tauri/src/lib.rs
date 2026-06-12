@@ -97,6 +97,19 @@ pub fn run() {
                 let w = app
                     .get_webview_window("main")
                     .expect("main window must exist");
+
+                // Native translucent material under the UI (menu-like look,
+                // follows the system light/dark appearance). Radius matches
+                // the CSS .app border-radius.
+                if let Err(e) = window_vibrancy::apply_vibrancy(
+                    &w,
+                    window_vibrancy::NSVisualEffectMaterial::Menu,
+                    None,
+                    Some(14.0),
+                ) {
+                    log::warn!("vibrancy not applied: {e}");
+                }
+
                 let panel = w.to_panel().expect("failed to convert window to panel");
                 // NSFloatingWindowLevel — above normal windows, like Spotlight.
                 panel.set_level(4);
