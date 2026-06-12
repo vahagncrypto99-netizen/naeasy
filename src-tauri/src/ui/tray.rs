@@ -1,6 +1,12 @@
 //! Tray icon (menu-bar entry) and main-window show/hide/position plumbing.
 
-use tauri::Manager;
+use tauri::{Emitter, Manager};
+
+/// Tell the frontend the window was just shown — it resets transient UI
+/// (open settings panel, popovers) so the user always lands on the tree.
+fn emit_shown(app: &tauri::AppHandle) {
+    let _ = app.emit("naeasy://shown", ());
+}
 
 /// Make every normal-level window of the app join all Spaces and fullscreen
 /// Spaces (the status-bar window and other high-level windows are left
@@ -81,6 +87,7 @@ pub fn toggle_main(app: &tauri::AppHandle) {
                 make_windows_join_all_spaces(app);
                 position_main_under_tray(app);
                 panel.show();
+                emit_shown(app);
             }
             return;
         }
@@ -96,6 +103,7 @@ pub fn toggle_main(app: &tauri::AppHandle) {
             let _ = w.unminimize();
             let _ = w.show();
             let _ = w.set_focus();
+            emit_shown(app);
         }
     }
 }
@@ -109,6 +117,7 @@ pub fn show_main(app: &tauri::AppHandle) {
             make_windows_join_all_spaces(app);
             position_main_under_tray(app);
             panel.show();
+            emit_shown(app);
             return;
         }
     }
@@ -118,6 +127,7 @@ pub fn show_main(app: &tauri::AppHandle) {
         let _ = w.show();
         let _ = w.unminimize();
         let _ = w.set_focus();
+        emit_shown(app);
     }
 }
 

@@ -9,8 +9,10 @@ import {
   renderBranches,
   initSettings,
   initAutostart,
+  closeSettings,
   prettyAccel,
 } from "./settings.js";
+import { hideIdePicker, hideFastStart } from "./tree.js";
 import { initKeyboard } from "./shortcuts.js";
 
 // macOS gets translucent surfaces over the native vibrancy material.
@@ -119,6 +121,14 @@ initTree({
 });
 initSettings({ refresh, applyState });
 initKeyboard({ openProject });
+
+// Every show starts from a clean slate: the tree, not a leftover settings
+// panel or popover from the previous session.
+api.onShown(() => {
+  closeSettings();
+  hideIdePicker();
+  hideFastStart();
+});
 
 $("#add-workspace").addEventListener("click", addWorkspace);
 $("#rescan").addEventListener("click", () => {

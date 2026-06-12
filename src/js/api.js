@@ -41,6 +41,9 @@ export function hideWindow() {
   }
 }
 
+/// Fires every time the popover window is shown (hotkey, tray, dock reopen).
+export const onShown = (cb) => window.__TAURI__.event.listen("naeasy://shown", cb);
+
 export const autostart = {
   available: !!autostartPlugin,
   enable: () => autostartPlugin.enable(),
