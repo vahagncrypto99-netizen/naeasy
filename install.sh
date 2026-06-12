@@ -1,155 +1,70 @@
 #!/usr/bin/env bash
-# naeasy — one-step installer.
-# Checks every required tool. For anything missing it prints the exact fix
-# steps for THAT tool and stops. When everything is present it builds the app
-# (only if it isn't built yet) and installs it into /Applications.
+# naeasy installer (prebuilt, macOS). Installs OR upgrades. Idempotent.
 #
-#   ./install.sh            build if needed, then install
-#   ./install.sh --rebuild  force a clean recompile
+#   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/vahagncrypto99-netizen/naeasy/main/install.sh)"
 #
-# Can also run standalone (no clone needed):
-#   /bin/bash -c "$(curl -fsSL https://gitlab.com/vahagn.crypto.99-group/naeasy/-/raw/main/install.sh)"
-# In that mode the source is fetched into a temporary directory, built,
-# installed, and the temporary directory is removed afterwards.
+# Downloads the newest release asset for this CPU from GitHub Releases.
 
 set -uo pipefail
-cd "$(dirname "$0")"
 
+REPO="vahagncrypto99-netizen/naeasy"
 BOLD=$'\033[1m'; RED=$'\033[31m'; GREEN=$'\033[32m'; YELLOW=$'\033[33m'; RESET=$'\033[0m'
 
-missing=0
-ok() { printf "%s✓ %s%s\n" "$GREEN" "$1" "$RESET"; }
-
-# need_step <label> <step1> [step2 ...]
-need_step() {
-  missing=$((missing + 1))
-  printf "%s✗ %s — not installed%s\n" "$RED" "$1" "$RESET"
-  shift
-  for line in "$@"; do printf "      %s\n" "$line"; done
-  echo
-}
-
-echo "${BOLD}naeasy — environment check${RESET}"
-echo
-
 if [ "$(uname)" != "Darwin" ]; then
-  echo "${YELLOW}! naeasy targets macOS. On this OS the /Applications install step will be skipped.${RESET}"
-  echo
-fi
-
-# 1. Xcode Command Line Tools (needed to link Rust on macOS)
-if xcode-select -p >/dev/null 2>&1; then
-  ok "Xcode Command Line Tools"
-else
-  need_step "Xcode Command Line Tools" \
-    "Run:  xcode-select --install" \
-    "A system dialog opens — click Install, wait for it to finish, then run ./install.sh again."
-fi
-
-# 2. Node.js (>= 18)
-if command -v node >/dev/null 2>&1; then
-  ver=$(node -v | sed 's/v//'); major=${ver%%.*}
-  if [ "${major:-0}" -ge 18 ]; then
-    ok "Node.js $ver"
-  else
-    need_step "Node.js >= 18 (found $ver)" \
-      "Update via Homebrew:  brew install node" \
-      "or download the LTS build:  https://nodejs.org/en/download"
-  fi
-else
-  need_step "Node.js" \
-    "Via Homebrew:  brew install node" \
-    "or download the LTS installer:  https://nodejs.org/en/download" \
-    'No Homebrew? install it:  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
-fi
-
-# 3. npm (ships with Node)
-if command -v npm >/dev/null 2>&1; then
-  ok "npm $(npm -v)"
-else
-  need_step "npm" "Usually installed together with Node.js — reinstall Node (see above)."
-fi
-
-# 4. Rust / cargo
-if command -v cargo >/dev/null 2>&1; then
-  ok "Rust $(rustc --version 2>/dev/null | awk '{print $2}')"
-else
-  need_step "Rust (cargo)" \
-    "Install rustup:  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh" \
-    'Load it in this shell:  source "$HOME/.cargo/env"' \
-    "Then run ./install.sh again."
-fi
-
-# 5. git (needed only in standalone mode, to fetch the source)
-if command -v git >/dev/null 2>&1; then
-  ok "git $(git --version | awk '{print $3}')"
-else
-  need_step "git" \
-    "On macOS it ships with the Xcode Command Line Tools:  xcode-select --install"
-fi
-
-if [ "$missing" -gt 0 ]; then
-  echo "${BOLD}${RED}Missing tools: $missing.${RESET} Fix the items above and run ${BOLD}./install.sh${RESET} again."
+  echo "${YELLOW}This installer is for macOS. On Linux use install-linux.sh.${RESET}"
   exit 1
 fi
 
-echo
-echo "${GREEN}${BOLD}All tools present.${RESET}"
-echo
+ARCH=$([ "$(uname -m)" = "arm64" ] && echo arm64 || echo x64)
 
-APP_BUILD="src-tauri/target/release/bundle/macos/naeasy.app"
-REBUILD=0
-[ "${1:-}" = "--rebuild" ] && REBUILD=1
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
 
-set -e
-
-# Standalone mode (curl | bash): no source tree around — fetch it into a
-# temporary directory, build from there, and remove it when the script exits.
-REPO_URL="https://gitlab.com/vahagn.crypto.99-group/naeasy.git"
-if [ ! -f package.json ] || [ ! -d src-tauri ]; then
-  TMP_SRC="$(mktemp -d "${TMPDIR:-/tmp}/naeasy-install.XXXXXX")"
-  trap 'rm -rf "$TMP_SRC"' EXIT
-  echo "▸ Fetching source into a temporary directory ($TMP_SRC)…"
-  git clone --depth 1 "$REPO_URL" "$TMP_SRC/naeasy"
-  cd "$TMP_SRC/naeasy"
-fi
-
-echo "▸ npm install…"
-npm install
-# Always build so the install reflects your latest code. Tauri/Cargo builds
-# are incremental — only changed files recompile, so this is fast after the
-# first build. Use --rebuild for a full clean recompile.
-if [ "$REBUILD" = "1" ]; then
-  echo "▸ Clean rebuild (cargo clean)…"
-  (cd src-tauri && cargo clean) || true
-fi
-echo "▸ Building release (first build takes a few minutes; later builds are incremental)…"
-npm run build
-
-if [ ! -d "$APP_BUILD" ]; then
-  echo "${RED}✗ Build did not produce $APP_BUILD${RESET}" >&2
+echo "▸ Looking up the latest release (${ARCH})…"
+ASSETS=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null \
+  | grep -o '"browser_download_url" *: *"[^"]*"' | cut -d'"' -f4)
+URL=$(echo "$ASSETS" | grep "naeasy-macos-${ARCH}-" | head -1)
+# Fallback: a single-arch zip from older releases.
+[ -z "${URL:-}" ] && URL=$(echo "$ASSETS" | grep "naeasy-macos-" | head -1)
+if [ -z "${URL:-}" ]; then
+  echo "${RED}No macOS build found in the latest release of $REPO.${RESET}" >&2
   exit 1
 fi
 
-# Quit any running instance so the bundle can be replaced.
+ZIP="$TMP/$(basename "$URL")"
+echo "▸ Downloading $(basename "$URL")…"
+curl -fsSL -o "$ZIP" "$URL" || { echo "${RED}Download failed.${RESET}" >&2; exit 1; }
+echo "${BOLD}naeasy — installing from $(basename "$ZIP")${RESET}"
+
+# 1. Quit a running instance (upgrade case) so the bundle can be replaced.
 osascript -e 'tell application "naeasy" to quit' >/dev/null 2>&1 || true
 pkill -x naeasy >/dev/null 2>&1 || true
 sleep 1
 
+# 2. Unpack.
+UNPACK="$TMP/unpack"
+mkdir -p "$UNPACK"
+unzip -oq "$ZIP" -d "$UNPACK"
+APP=$(find "$UNPACK" -maxdepth 2 -name "naeasy.app" -type d | head -1)
+[ -n "$APP" ] || { echo "${RED}naeasy.app not found inside the zip${RESET}" >&2; exit 1; }
+
+# 3. Install — replace any existing copy (in /Applications or ~/Applications).
+rm -rf "$HOME/Applications/naeasy.app" 2>/dev/null || true
 DEST="/Applications/naeasy.app"
-echo "▸ Installing to /Applications…"
-if rm -rf "$DEST" 2>/dev/null && cp -R "$APP_BUILD" "$DEST" 2>/dev/null; then
+if rm -rf "$DEST" 2>/dev/null && cp -R "$APP" "$DEST" 2>/dev/null; then
   :
 else
-  echo "${YELLOW}  No write access to /Applications — installing to ~/Applications instead.${RESET}"
+  echo "${YELLOW}No write access to /Applications — installing to ~/Applications.${RESET}"
   mkdir -p "$HOME/Applications"
-  rm -rf "$HOME/Applications/naeasy.app"
-  cp -R "$APP_BUILD" "$HOME/Applications/naeasy.app"
   DEST="$HOME/Applications/naeasy.app"
+  rm -rf "$DEST"
+  cp -R "$APP" "$DEST"
 fi
 
-echo "▸ Launching…"
-open "$DEST"
+# 4. Drop the quarantine flag so the (unsigned) app opens without Gatekeeper nags.
+xattr -dr com.apple.quarantine "$DEST" 2>/dev/null || true
 
-echo
-echo "${GREEN}✓ Installed:${RESET} $DEST"
+# 5. Launch.
+open "$DEST"
+echo "${GREEN}✓ Installed / updated:${RESET} $DEST"
+echo "  naeasy lives in the menu bar — toggle with Cmd+Shift+M."

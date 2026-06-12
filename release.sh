@@ -1,91 +1,28 @@
 #!/usr/bin/env bash
-# Build a distributable macOS release into ./dist (run from the PRIVATE repo).
-# Then publish ./dist to the PUBLIC repo (or via `gh release`).
+# Cut a release: bump the version everywhere, commit and tag.
+# CI (.github/workflows/release.yml) builds macOS + Linux artifacts and
+# publishes the GitHub Release when the tag is pushed.
 #
-#   ./release.sh            build current version
-#   ./release.sh 0.2.0      bump version everywhere, then build
+#   ./release.sh 1.2.0
+#   git push --follow-tags
 
 set -euo pipefail
 cd "$(dirname "$0")"
 
 GREEN=$'\033[32m'; BOLD=$'\033[1m'; RESET=$'\033[0m'
 
-# Optional version bump (keeps tauri.conf.json / Cargo.toml / package.json in sync).
-if [ "${1:-}" != "" ]; then
-  NEW="$1"
-  echo "▸ Bumping version → $NEW"
-  node -e "const f='src-tauri/tauri.conf.json',j=require('fs');const c=JSON.parse(j.readFileSync(f));c.version='$NEW';j.writeFileSync(f,JSON.stringify(c,null,2)+'\n')"
-  node -e "const f='package.json',j=require('fs');const c=JSON.parse(j.readFileSync(f));c.version='$NEW';j.writeFileSync(f,JSON.stringify(c,null,2)+'\n')"
-  sed -i.bak -E "s/^version = \".*\"/version = \"$NEW\"/" src-tauri/Cargo.toml && rm -f src-tauri/Cargo.toml.bak
-fi
+NEW="${1:?usage: ./release.sh X.Y.Z}"
+echo "${BOLD}▸ Bumping version → $NEW${RESET}"
+node -e "const f='src-tauri/tauri.conf.json',j=require('fs');const c=JSON.parse(j.readFileSync(f));c.version='$NEW';j.writeFileSync(f,JSON.stringify(c,null,2)+'\n')"
+node -e "const f='package.json',j=require('fs');const c=JSON.parse(j.readFileSync(f));c.version='$NEW';j.writeFileSync(f,JSON.stringify(c,null,2)+'\n')"
+sed -i.bak -E "s/^version = \".*\"/version = \"$NEW\"/" src-tauri/Cargo.toml && rm -f src-tauri/Cargo.toml.bak
+# Refresh Cargo.lock with the new version.
+(cd src-tauri && cargo update -p naeasy --precise "$NEW" 2>/dev/null || cargo check -q 2>/dev/null || true)
 
-VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
-echo "${BOLD}▸ Releasing naeasy v$VERSION${RESET}"
-
-echo "▸ Building release…"
-npm install
-npm run build
-
-APP="src-tauri/target/release/bundle/macos/naeasy.app"
-[ -d "$APP" ] || { echo "Build did not produce $APP" >&2; exit 1; }
-
-mkdir -p dist
-rm -f dist/naeasy-macos-*.zip
-ZIP_ABS="$PWD/dist/naeasy-macos-$VERSION.zip"
-# ditto preserves the .app bundle structure (symlinks, resources).
-( cd "$(dirname "$APP")" && ditto -c -k --sequesterRsrc --keepParent "naeasy.app" "$ZIP_ABS" )
-
-cp scripts/public-install.sh dist/install.sh
-chmod +x dist/install.sh
-
-cat > dist/README.md <<EOF
-# naeasy — install (macOS)
-
-\`\`\`bash
-./install.sh
-\`\`\`
-
-Installs or upgrades naeasy. Safe whether a previous version is installed or not.
-Version: $VERSION
-EOF
+git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock 2>/dev/null || true
+git commit -m "release v$NEW"
+git tag "v$NEW"
 
 echo
-echo "${GREEN}✓ dist/ ready:${RESET}"
-ls -1 dist
-
-# Publish into the local checkout of the PUBLIC binary repo (bin/ layout).
-# Single-version model: bin/ holds only the latest release (since v1.0.0);
-# git history keeps the older artifacts if ever needed.
-# Guard against pointing at this (dev) repo itself.
-PUBLIC_DIR="${PUBLIC_DIR:-$(dirname "$PWD")/naeasy}"
-if [ -d "$PUBLIC_DIR/.git" ] && [ "$(cd "$PUBLIC_DIR" && pwd)" != "$PWD" ]; then
-  echo
-  echo "▸ Publishing v$VERSION into $PUBLIC_DIR"
-  mkdir -p "$PUBLIC_DIR/bin"
-  # Drop previous versions — installers always pick the newest anyway.
-  find "$PUBLIC_DIR/bin" \( -name "naeasy-macos-*.zip" -o -name "naeasy_*.deb" \) \
-    ! -name "*$VERSION*" -delete
-  cp "dist/naeasy-macos-$VERSION.zip" "$PUBLIC_DIR/bin/"
-  cp dist/install.sh "$PUBLIC_DIR/install.sh"
-  chmod +x "$PUBLIC_DIR/install.sh"
-  # Linux .debs, if built (scripts/build-linux.sh → dist-linux/).
-  if ls dist-linux/naeasy_"$VERSION"_*.deb >/dev/null 2>&1; then
-    cp dist-linux/naeasy_"$VERSION"_*.deb "$PUBLIC_DIR/bin/"
-    cp scripts/public-install-linux.sh "$PUBLIC_DIR/install-linux.sh"
-    chmod +x "$PUBLIC_DIR/install-linux.sh"
-  fi
-  [ -f "$PUBLIC_DIR/README.md" ] || cp dist/README.md "$PUBLIC_DIR/README.md"
-  git -C "$PUBLIC_DIR" add bin install.sh README.md
-  [ -f "$PUBLIC_DIR/install-linux.sh" ] && git -C "$PUBLIC_DIR" add install-linux.sh
-  if git -C "$PUBLIC_DIR" commit -m "release v$VERSION" >/dev/null; then
-    echo "${GREEN}✓ Committed in public repo.${RESET} Push it:"
-    echo "    git -C \"$PUBLIC_DIR\" push"
-  else
-    echo "Nothing new to commit in the public repo."
-  fi
-else
-  echo
-  echo "Publish (no public checkout at $PUBLIC_DIR — manual options):"
-  echo "  • Public repo:  copy dist/naeasy-macos-$VERSION.zip → <public>/bin/, dist/install.sh → <public>/, commit & push"
-  echo "  • GitHub release:  gh release create v$VERSION dist/naeasy-macos-$VERSION.zip dist/install.sh"
-fi
+echo "${GREEN}✓ v$NEW committed and tagged.${RESET} Publish with:"
+echo "    git push --follow-tags"

@@ -1,46 +1,39 @@
 #!/usr/bin/env bash
 # naeasy installer (prebuilt, macOS). Installs OR upgrades. Idempotent.
 #
-# Two ways to run (this file ships in the PUBLIC repo):
-#   • one-liner, no clone needed — downloads the newest zip itself:
-#       /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/vahagncrypto99-netizen/naeasy/main/install.sh)"
-#   • from a clone:  ./install.sh   (uses the newest bin/naeasy-macos-*.zip)
+#   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/vahagncrypto99-netizen/naeasy/main/install.sh)"
+#
+# Downloads the newest release asset for this CPU from GitHub Releases.
 
 set -uo pipefail
-cd "$(dirname "$0")"
 
 REPO="vahagncrypto99-netizen/naeasy"
 BOLD=$'\033[1m'; RED=$'\033[31m'; GREEN=$'\033[32m'; YELLOW=$'\033[33m'; RESET=$'\033[0m'
 
 if [ "$(uname)" != "Darwin" ]; then
-  echo "${YELLOW}This installer is for macOS.${RESET}"
+  echo "${YELLOW}This installer is for macOS. On Linux use install-linux.sh.${RESET}"
   exit 1
 fi
+
+ARCH=$([ "$(uname -m)" = "arm64" ] && echo arm64 || echo x64)
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
-# Newest version wins; zips live in bin/ (fallback: next to this script).
-ZIP=$(ls bin/naeasy-macos-*.zip naeasy-macos-*.zip 2>/dev/null | sort -V | tail -1)
-
-# Standalone (curl) mode — no local zip: fetch the newest one from GitHub.
-if [ -z "${ZIP:-}" ]; then
-  echo "▸ Looking up the newest version in github.com/${REPO}…"
-  NAME=$(curl -fsSL "https://api.github.com/repos/$REPO/contents/bin" 2>/dev/null \
-    | grep -o '"name" *: *"naeasy-macos-[^"]*\.zip"' \
-    | sed 's/.*"\(naeasy-macos-[^"]*\.zip\)"/\1/' \
-    | sort -V | tail -1)
-  if [ -z "${NAME:-}" ]; then
-    echo "${RED}Could not find a release zip in $REPO (bin/).${RESET}" >&2
-    exit 1
-  fi
-  echo "▸ Downloading ${NAME}…"
-  if ! curl -fsSL -o "$TMP/$NAME" "https://raw.githubusercontent.com/$REPO/main/bin/$NAME"; then
-    echo "${RED}Download failed.${RESET}" >&2
-    exit 1
-  fi
-  ZIP="$TMP/$NAME"
+echo "▸ Looking up the latest release (${ARCH})…"
+ASSETS=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null \
+  | grep -o '"browser_download_url" *: *"[^"]*"' | cut -d'"' -f4)
+URL=$(echo "$ASSETS" | grep "naeasy-macos-${ARCH}-" | head -1)
+# Fallback: a single-arch zip from older releases.
+[ -z "${URL:-}" ] && URL=$(echo "$ASSETS" | grep "naeasy-macos-" | head -1)
+if [ -z "${URL:-}" ]; then
+  echo "${RED}No macOS build found in the latest release of $REPO.${RESET}" >&2
+  exit 1
 fi
+
+ZIP="$TMP/$(basename "$URL")"
+echo "▸ Downloading $(basename "$URL")…"
+curl -fsSL -o "$ZIP" "$URL" || { echo "${RED}Download failed.${RESET}" >&2; exit 1; }
 echo "${BOLD}naeasy — installing from $(basename "$ZIP")${RESET}"
 
 # 1. Quit a running instance (upgrade case) so the bundle can be replaced.

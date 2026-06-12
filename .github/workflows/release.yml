@@ -1,0 +1,79 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest # arm64
+            target: aarch64-apple-darwin
+            bundles: app
+          - os: macos-13 # intel
+            target: x86_64-apple-darwin
+            bundles: app
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            bundles: deb
+          - os: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+            bundles: deb
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install Linux dependencies
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
+            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Install frontend dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build
+        run: npm run build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+
+      - name: Package macOS app
+        if: startsWith(matrix.os, 'macos')
+        run: |
+          VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          ARCH=$([ "${{ matrix.target }}" = "aarch64-apple-darwin" ] && echo arm64 || echo x64)
+          cd "src-tauri/target/${{ matrix.target }}/release/bundle/macos"
+          ditto -c -k --sequesterRsrc --keepParent naeasy.app "naeasy-macos-${ARCH}-${VERSION}.zip"
+          mkdir -p "$GITHUB_WORKSPACE/artifacts"
+          mv "naeasy-macos-${ARCH}-${VERSION}.zip" "$GITHUB_WORKSPACE/artifacts/"
+
+      - name: Collect Linux deb
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          mkdir -p artifacts
+          cp src-tauri/target/${{ matrix.target }}/release/bundle/deb/*.deb artifacts/
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          draft: false
+          generate_release_notes: true
