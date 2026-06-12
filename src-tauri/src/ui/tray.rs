@@ -109,6 +109,9 @@ pub fn toggle_main(app: &tauri::AppHandle) {
         } else {
             make_windows_join_all_spaces(app);
             position_main_under_tray(app);
+            // Keep-above so the popover rises over open apps (Linux WMs may
+            // drop the flag across hide/show cycles — re-assert every time).
+            let _ = w.set_always_on_top(true);
             let _ = w.unminimize();
             let _ = w.show();
             let _ = w.set_focus();
@@ -133,6 +136,7 @@ pub fn show_main(app: &tauri::AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         make_windows_join_all_spaces(app);
         position_main_under_tray(app);
+        let _ = w.set_always_on_top(true);
         let _ = w.show();
         let _ = w.unminimize();
         let _ = w.set_focus();
