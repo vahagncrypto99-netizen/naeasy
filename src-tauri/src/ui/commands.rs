@@ -89,6 +89,39 @@ pub fn set_open_in_tabs(state: State<AppState>, enabled: bool) -> Result<AppData
     state.service.set_open_in_tabs(enabled)
 }
 
+/// Open the project's git remote (origin) in the browser.
+#[tauri::command]
+pub fn open_repo_url(state: State<AppState>, path: String) -> Result<(), String> {
+    let url = state.service.repo_web_url(&path)?;
+    tauri_plugin_opener::open_url(&url, None::<String>).map_err(|e| e.to_string())
+}
+
+/// Create (or reuse) a branch from the chosen base and open the project.
+#[tauri::command]
+pub fn fast_start(
+    state: State<AppState>,
+    project_path: String,
+    branch: String,
+    base: Option<String>,
+) -> Result<(), String> {
+    state.service.fast_start(project_path, branch, base)
+}
+
+#[tauri::command]
+pub fn add_base_branch(state: State<AppState>, name: String) -> Result<AppData, String> {
+    state.service.add_base_branch(name)
+}
+
+#[tauri::command]
+pub fn remove_base_branch(state: State<AppState>, name: String) -> Result<AppData, String> {
+    state.service.remove_base_branch(&name)
+}
+
+#[tauri::command]
+pub fn set_default_base_branch(state: State<AppState>, name: String) -> Result<AppData, String> {
+    state.service.set_default_base_branch(name)
+}
+
 #[tauri::command]
 pub fn set_shortcut(
     app: tauri::AppHandle,

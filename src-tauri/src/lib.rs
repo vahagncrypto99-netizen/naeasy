@@ -71,6 +71,7 @@ pub fn run() {
                 repo,
                 infra::ide_detector::platform_detector(),
                 infra::project_launcher::platform_launcher(),
+                Arc::new(infra::git::SystemGitClient),
             );
             let shortcut_accel = service.shortcut();
             app.manage(AppState { service });
@@ -163,7 +164,12 @@ pub fn run() {
             ui::commands::set_shortcut,
             ui::commands::scan_open_projects,
             ui::commands::set_project_ide,
-            ui::commands::set_open_in_tabs
+            ui::commands::set_open_in_tabs,
+            ui::commands::open_repo_url,
+            ui::commands::fast_start,
+            ui::commands::add_base_branch,
+            ui::commands::remove_base_branch,
+            ui::commands::set_default_base_branch
         ])
         .on_window_event(|window, event| {
             // The red close button hides the window instead of quitting, so the

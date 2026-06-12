@@ -168,6 +168,9 @@ pub fn build_app_data(config: &Config) -> AppData {
         recents: config.recents.clone(),
         project_ides: config.project_ides.clone(),
         open_in_tabs: config.open_in_tabs,
+        base_branches: config.base_branches.clone(),
+        default_base_branch: config.default_base_branch.clone(),
+        project_base_branches: config.project_base_branches.clone(),
     }
 }
 

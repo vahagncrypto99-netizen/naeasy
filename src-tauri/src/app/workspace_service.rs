@@ -2,11 +2,13 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+use crate::domain::git_url::web_url_from_remote;
 use crate::domain::models::{
     default_shortcut, gen_id, now_secs, AppData, Config, Ide, Recent, Workspace,
 };
 use crate::domain::tree::build_app_data;
 use crate::infra::config_repository::ConfigRepository;
+use crate::infra::git::GitClient;
 use crate::infra::ide_detector::{ide_name_from_path, IdeDetector};
 use crate::infra::project_launcher::ProjectLauncher;
 
@@ -17,6 +19,7 @@ pub struct WorkspaceService {
     repo: Arc<dyn ConfigRepository>,
     detector: Arc<dyn IdeDetector>,
     launcher: Arc<dyn ProjectLauncher>,
+    git: Arc<dyn GitClient>,
 }
 
 impl WorkspaceService {
@@ -24,6 +27,7 @@ impl WorkspaceService {
         repo: Arc<dyn ConfigRepository>,
         detector: Arc<dyn IdeDetector>,
         launcher: Arc<dyn ProjectLauncher>,
+        git: Arc<dyn GitClient>,
     ) -> Self {
         let config = repo.load();
         Self {
@@ -31,6 +35,7 @@ impl WorkspaceService {
             repo,
             detector,
             launcher,
+            git,
         }
     }
 
@@ -202,6 +207,111 @@ impl WorkspaceService {
         Ok(build_app_data(&config))
     }
 
+    /// Browsable https URL of the project's `origin` remote.
+    pub fn repo_web_url(&self, project_path: &str) -> Result<String, String> {
+        let remote = self
+            .git
+            .remote_url(project_path)
+            .ok_or("No git remote (origin) found")?;
+        let aliases = self.git.ssh_aliases();
+        web_url_from_remote(&remote, &aliases)
+            .ok_or_else(|| format!("Can't build a web URL from remote: {remote}"))
+    }
+
+    /// Fast-start: create (or reuse) a branch from the chosen base and open
+    /// the project in its IDE. The base resolution order is: explicit `base`
+    /// → the project's remembered base → the global default. An explicit
+    /// choice is remembered for the project.
+    pub fn fast_start(
+        &self,
+        project_path: String,
+        branch: String,
+        base: Option<String>,
+    ) -> Result<(), String> {
+        let branch = branch.trim().to_string();
+        if branch.is_empty() {
+            return Err("Branch name is empty".into());
+        }
+        if !Path::new(&project_path).exists() {
+            return Err(format!("Project not found: {project_path}"));
+        }
+
+        let base = {
+            let mut config = self.config.lock().unwrap();
+            let resolved = base
+                .filter(|b| !b.trim().is_empty())
+                .unwrap_or_else(|| {
+                    config
+                        .project_base_branches
+                        .get(&project_path)
+                        .cloned()
+                        .unwrap_or_else(|| config.default_base_branch.clone())
+                });
+            // Remember the per-project choice; drop the override when it
+            // matches the global default again.
+            let changed = config.project_base_branches.get(&project_path)
+                != Some(&resolved);
+            if changed {
+                if resolved == config.default_base_branch {
+                    config.project_base_branches.remove(&project_path);
+                } else {
+                    config
+                        .project_base_branches
+                        .insert(project_path.clone(), resolved.clone());
+                }
+                let _ = self.repo.save(&config);
+            }
+            resolved
+        };
+
+        if self.git.branch_exists(&project_path, &branch) {
+            // Idempotent: re-running fast-start just returns to the task.
+            self.git.checkout(&project_path, &branch)?;
+        } else {
+            self.git.create_branch_from(&project_path, &branch, &base)?;
+        }
+
+        self.open_project(project_path, None)
+    }
+
+    pub fn add_base_branch(&self, name: String) -> Result<AppData, String> {
+        let name = name.trim().to_string();
+        if name.is_empty() {
+            return Err("Branch name is empty".into());
+        }
+        let mut config = self.config.lock().unwrap();
+        if !config.base_branches.contains(&name) {
+            config.base_branches.push(name);
+        }
+        self.repo.save(&config)?;
+        Ok(build_app_data(&config))
+    }
+
+    pub fn remove_base_branch(&self, name: &str) -> Result<AppData, String> {
+        let mut config = self.config.lock().unwrap();
+        if config.base_branches.len() <= 1 {
+            return Err("At least one base branch is required".into());
+        }
+        config.base_branches.retain(|b| b != name);
+        if config.default_base_branch == name {
+            config.default_base_branch =
+                config.base_branches.first().cloned().unwrap_or_default();
+        }
+        config.project_base_branches.retain(|_, b| b != name);
+        self.repo.save(&config)?;
+        Ok(build_app_data(&config))
+    }
+
+    pub fn set_default_base_branch(&self, name: String) -> Result<AppData, String> {
+        let mut config = self.config.lock().unwrap();
+        if !config.base_branches.contains(&name) {
+            return Err("Unknown base branch".into());
+        }
+        config.default_base_branch = name;
+        self.repo.save(&config)?;
+        Ok(build_app_data(&config))
+    }
+
     /// Persist a new shortcut accelerator (registration with the OS is the
     /// UI layer's job — it owns the Tauri app handle).
     pub fn set_shortcut(&self, accel: String) -> Result<AppData, String> {
@@ -281,6 +391,36 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct FakeGitClient {
+        remote: Option<String>,
+        existing_branches: Vec<String>,
+        ops: Mutex<Vec<String>>,
+    }
+
+    impl crate::infra::git::GitClient for FakeGitClient {
+        fn remote_url(&self, _p: &str) -> Option<String> {
+            self.remote.clone()
+        }
+        fn ssh_aliases(&self) -> HashMap<String, String> {
+            HashMap::from([("gitlab-crypto".to_string(), "gitlab.com".to_string())])
+        }
+        fn branch_exists(&self, _p: &str, branch: &str) -> bool {
+            self.existing_branches.iter().any(|b| b == branch)
+        }
+        fn checkout(&self, _p: &str, branch: &str) -> Result<(), String> {
+            self.ops.lock().unwrap().push(format!("checkout {branch}"));
+            Ok(())
+        }
+        fn create_branch_from(&self, _p: &str, branch: &str, base: &str) -> Result<(), String> {
+            self.ops
+                .lock()
+                .unwrap()
+                .push(format!("create {branch} from {base}"));
+            Ok(())
+        }
+    }
+
     fn ide(id: &str, name: &str, path: &str) -> Ide {
         Ide {
             id: id.into(),
@@ -295,8 +435,24 @@ mod tests {
             repo.clone(),
             Arc::new(FakeDetector { ides: detected }),
             Arc::new(FakeLauncher::new()),
+            Arc::new(FakeGitClient::default()),
         );
         (service, repo)
+    }
+
+    fn service_with_git(
+        detected: Vec<Ide>,
+        git: FakeGitClient,
+    ) -> (WorkspaceService, Arc<FakeConfigRepository>, Arc<FakeGitClient>) {
+        let repo = Arc::new(FakeConfigRepository::new());
+        let git = Arc::new(git);
+        let service = WorkspaceService::new(
+            repo.clone(),
+            Arc::new(FakeDetector { ides: detected }),
+            Arc::new(FakeLauncher::new()),
+            git.clone(),
+        );
+        (service, repo, git)
     }
 
     #[test]
@@ -416,8 +572,107 @@ mod tests {
             repo.clone(),
             Arc::new(FakeDetector { ides: detected }),
             launcher.clone(),
+            Arc::new(FakeGitClient::default()),
         );
         (service, repo, launcher)
+    }
+
+    #[test]
+    fn fast_start_creates_branch_from_default_base() {
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path().to_string_lossy().to_string();
+        let (service, _, git) =
+            service_with_git(vec![ide("a", "PhpStorm", "/apps/PhpStorm.app")], FakeGitClient::default());
+        service.detect_ides().unwrap();
+
+        service.fast_start(project, "HP-432".into(), None).unwrap();
+        assert_eq!(
+            git.ops.lock().unwrap().as_slice(),
+            ["create HP-432 from master"]
+        );
+    }
+
+    #[test]
+    fn fast_start_reuses_existing_branch() {
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path().to_string_lossy().to_string();
+        let git = FakeGitClient {
+            existing_branches: vec!["HP-432".into()],
+            ..Default::default()
+        };
+        let (service, _, git) =
+            service_with_git(vec![ide("a", "PhpStorm", "/apps/PhpStorm.app")], git);
+        service.detect_ides().unwrap();
+
+        service.fast_start(project, "HP-432".into(), None).unwrap();
+        assert_eq!(git.ops.lock().unwrap().as_slice(), ["checkout HP-432"]);
+    }
+
+    #[test]
+    fn fast_start_remembers_project_base() {
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path().to_string_lossy().to_string();
+        let (service, repo, git) =
+            service_with_git(vec![ide("a", "PhpStorm", "/apps/PhpStorm.app")], FakeGitClient::default());
+        service.detect_ides().unwrap();
+        service.add_base_branch("develop".into()).unwrap();
+
+        service
+            .fast_start(project.clone(), "HP-1".into(), Some("develop".into()))
+            .unwrap();
+        assert_eq!(
+            repo.load().project_base_branches.get(&project).map(String::as_str),
+            Some("develop")
+        );
+
+        // Next fast-start without an explicit base uses the remembered one.
+        service.fast_start(project, "HP-2".into(), None).unwrap();
+        assert_eq!(
+            git.ops.lock().unwrap().last().map(String::as_str),
+            Some("create HP-2 from develop")
+        );
+    }
+
+    #[test]
+    fn fast_start_rejects_empty_branch() {
+        let (service, _) = service_with(vec![]);
+        assert!(service.fast_start("/p".into(), "  ".into(), None).is_err());
+    }
+
+    #[test]
+    fn base_branch_settings_flow() {
+        let (service, _) = service_with(vec![]);
+        let data = service.add_base_branch("develop".into()).unwrap();
+        assert_eq!(data.base_branches, ["master", "develop"]);
+
+        let data = service.set_default_base_branch("develop".into()).unwrap();
+        assert_eq!(data.default_base_branch, "develop");
+
+        let data = service.remove_base_branch("develop").unwrap();
+        assert_eq!(data.base_branches, ["master"]);
+        assert_eq!(data.default_base_branch, "master");
+
+        assert!(service.remove_base_branch("master").is_err(), "last one stays");
+        assert!(service.set_default_base_branch("nope".into()).is_err());
+    }
+
+    #[test]
+    fn repo_web_url_resolves_alias() {
+        let git = FakeGitClient {
+            remote: Some("git@gitlab-crypto:group/repo.git".into()),
+            ..Default::default()
+        };
+        let (service, _, _) = service_with_git(vec![], git);
+        assert_eq!(
+            service.repo_web_url("/p").unwrap(),
+            "https://gitlab.com/group/repo"
+        );
+    }
+
+    #[test]
+    fn repo_web_url_errors_without_remote() {
+        let (service, _) = service_with(vec![]);
+        assert!(service.repo_web_url("/p").is_err());
     }
 
     #[test]

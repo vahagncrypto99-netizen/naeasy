@@ -37,10 +37,27 @@ pub struct Config {
     /// new window per project.
     #[serde(default = "default_true")]
     pub open_in_tabs: bool,
+    /// Candidate base branches for fast-start (editable, global).
+    #[serde(default = "default_base_branches")]
+    pub base_branches: Vec<String>,
+    /// The globally selected base branch for fast-start.
+    #[serde(default = "default_base_branch")]
+    pub default_base_branch: String,
+    /// Per-project base-branch override (path -> branch name).
+    #[serde(default)]
+    pub project_base_branches: std::collections::HashMap<String, String>,
 }
 
 fn default_true() -> bool {
     true
+}
+
+pub fn default_base_branch() -> String {
+    "master".to_string()
+}
+
+fn default_base_branches() -> Vec<String> {
+    vec!["master".to_string()]
 }
 
 impl Default for Config {
@@ -53,6 +70,9 @@ impl Default for Config {
             recents: Default::default(),
             project_ides: Default::default(),
             open_in_tabs: true,
+            base_branches: default_base_branches(),
+            default_base_branch: default_base_branch(),
+            project_base_branches: Default::default(),
         }
     }
 }
@@ -119,6 +139,9 @@ pub struct AppData {
     /// Preferred IDE per project path (path -> IDE id).
     pub project_ides: std::collections::HashMap<String, String>,
     pub open_in_tabs: bool,
+    pub base_branches: Vec<String>,
+    pub default_base_branch: String,
+    pub project_base_branches: std::collections::HashMap<String, String>,
 }
 
 #[cfg(test)]
