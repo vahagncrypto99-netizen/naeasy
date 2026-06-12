@@ -40,16 +40,17 @@ export function renderIdeList() {
 // ------------------------- Fast-start base branches -------------------------
 
 export function renderBranches() {
-  const select = $("#base-branch-select");
   const branches = store.state.base_branches || ["master"];
   const def = store.state.default_base_branch || branches[0];
-  select.innerHTML = branches
+  const removable = branches.length > 1;
+  $("#branch-chips").innerHTML = branches
     .map(
       (b) =>
-        `<option value="${escapeHtml(b)}" ${b === def ? "selected" : ""}>${escapeHtml(b)}</option>`
+        `<span class="chip-branch ${b === def ? "active" : ""}" data-branch="${escapeHtml(b)}" title="Make default">${escapeHtml(b)}${
+          removable ? `<span class="chip-x" data-del-branch="${escapeHtml(b)}" title="Remove">✕</span>` : ""
+        }</span>`
     )
     .join("");
-  $("#remove-base-branch").disabled = branches.length <= 1;
 }
 
 // ------------------------- Shortcut recorder -------------------------
@@ -130,13 +131,18 @@ export function initSettings({ refresh, applyState }) {
     if (id) refresh(() => api.setDefaultIde(id));
   });
 
-  // Fast-start base branches.
-  $("#base-branch-select").addEventListener("change", (e) => {
-    if (e.target.value) refresh(() => api.setDefaultBaseBranch(e.target.value));
-  });
-  $("#remove-base-branch").addEventListener("click", () => {
-    const name = $("#base-branch-select").value;
-    if (name) refresh(() => api.removeBaseBranch(name));
+  // Fast-start base branches: click a chip = make default, ✕ = remove.
+  $("#branch-chips").addEventListener("click", (e) => {
+    const del = e.target.closest("[data-del-branch]");
+    if (del) {
+      e.stopPropagation();
+      refresh(() => api.removeBaseBranch(del.getAttribute("data-del-branch")));
+      return;
+    }
+    const chip = e.target.closest("[data-branch]");
+    if (chip) {
+      refresh(() => api.setDefaultBaseBranch(chip.getAttribute("data-branch")));
+    }
   });
   const addBranch = async () => {
     const input = $("#new-base-branch");

@@ -21,7 +21,8 @@ let handlers = {
 
 // Branch/link glyphs for the hover actions on repo rows.
 const ICON_LINK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>`;
-const ICON_BOLT = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
+// "New branch": a git branch with a plus — the VS Code "create branch" idiom.
+const ICON_NEW_BRANCH = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="6" cy="18" r="2.6"/><circle cx="17" cy="6" r="2.6"/><path d="M17 8.6c0 4.6-4.6 6.4-8 7"/><line x1="17" y1="14" x2="17" y2="20"/><line x1="14" y1="17" x2="20" y2="17"/></svg>`;
 
 const content = () => $("#content");
 
@@ -74,7 +75,7 @@ function renderNode(node, depth) {
   html += `<span class="label">${escapeHtml(node.name)}</span>`;
   if (node.is_repo) {
     html += metaHtml(node);
-    html += `<span class="row-act" data-fast-start="${escapeAttr(node.path)}" title="Fast-start: new branch + IDE">${ICON_BOLT}</span>`;
+    html += `<span class="row-act" data-fast-start="${escapeAttr(node.path)}" title="New branch from base + open IDE">${ICON_NEW_BRANCH}</span>`;
     html += `<span class="row-act" data-repo-link="${escapeAttr(node.path)}" title="Open repository in browser">${ICON_LINK}</span>`;
     // The project's remembered IDE wins over the default one.
     const own = ideName((store.state.project_ides || {})[node.path]);

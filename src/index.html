@@ -73,17 +73,13 @@
 
         <div class="section-row" style="margin-top:16px">
           <span class="section-label">Fast-start base branches</span>
-          <button id="remove-base-branch" class="icon-btn" title="Remove the selected branch">✕</button>
         </div>
-        <div class="select-row">
-          <span class="select-label">Default</span>
-          <select id="base-branch-select" class="select"></select>
-        </div>
+        <div id="branch-chips" class="chips"></div>
         <div class="select-row">
           <input id="new-base-branch" class="search" type="text" placeholder="Add base branch, e.g. develop" autocomplete="off" spellcheck="false" />
           <button id="add-base-branch" class="ghost-btn">Add</button>
         </div>
-        <p class="hint">⚡ on a project creates a branch from the base (freshened from origin) and opens the IDE. Each project can remember its own base.</p>
+        <p class="hint">Click a branch to make it the default, ✕ removes it. The branch button on a project creates a branch from the base (freshened from origin) and opens the IDE; each project can remember its own base.</p>
 
         <div class="section-row" style="margin-top:16px">
           <span class="section-label">Startup</span>
