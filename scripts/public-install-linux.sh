@@ -57,4 +57,3 @@ $SUDO apt-get install -y --allow-downgrades "$(realpath "$DEB")" \
 
 echo "${GREEN}✓ Installed / updated.${RESET}"
 echo "  Launch \"naeasy\" from your app menu — it lives in the system tray."
-echo "  Tip: install wmctrl for window focusing:  $SUDO apt-get install -y wmctrl"
