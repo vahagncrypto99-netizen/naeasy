@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build Linux .deb packages in Docker (per arch) → ./dist-linux/.
+# Build Linux .deb packages in Docker (per arch) → ./releases/.
 #
 #   ./scripts/build-linux.sh              # amd64 + arm64
 #   ARCHES=arm64 ./scripts/build-linux.sh # one arch
@@ -9,7 +9,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 ARCHES=${ARCHES:-"amd64 arm64"}
-mkdir -p dist-linux
+mkdir -p releases
 
 for arch in $ARCHES; do
   echo "▸ [$arch] building image…"
@@ -23,9 +23,9 @@ for arch in $ARCHES; do
     -v "naeasy-target-$arch:/app/src-tauri/target" \
     -v "naeasy-node-$arch:/app/node_modules" \
     "naeasy-linux-build:$arch" \
-    bash -c "npm install --no-audit --no-fund && npm run build -- --bundles deb && cp src-tauri/target/release/bundle/deb/*.deb /app/dist-linux/"
+    bash -c "npm install --no-audit --no-fund && npm run build -- --bundles deb && cp src-tauri/target/release/bundle/deb/*.deb /app/releases/"
 done
 
 echo
-echo "✓ dist-linux/ ready:"
-ls -1 dist-linux
+echo "✓ releases/ ready:"
+ls -1 releases
