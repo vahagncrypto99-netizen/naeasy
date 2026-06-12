@@ -20,6 +20,12 @@ export const scanOpenProjects = (names) => invoke("scan_open_projects", { names 
 export const setProjectIde = (projectPath, ideId) =>
   invoke("set_project_ide", { projectPath, ideId: ideId ?? null });
 export const setOpenInTabs = (enabled) => invoke("set_open_in_tabs", { enabled });
+export const openRepoUrl = (path) => invoke("open_repo_url", { path });
+export const fastStart = (projectPath, branch, base) =>
+  invoke("fast_start", { projectPath, branch, base: base ?? null });
+export const addBaseBranch = (name) => invoke("add_base_branch", { name });
+export const removeBaseBranch = (name) => invoke("remove_base_branch", { name });
+export const setDefaultBaseBranch = (name) => invoke("set_default_base_branch", { name });
 export const setShortcut = (accel) => invoke("set_shortcut", { accel });
 export const quitApp = () => invoke("quit_app");
 

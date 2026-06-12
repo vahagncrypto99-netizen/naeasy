@@ -37,6 +37,21 @@ export function renderIdeList() {
     .join("");
 }
 
+// ------------------------- Fast-start base branches -------------------------
+
+export function renderBranches() {
+  const select = $("#base-branch-select");
+  const branches = store.state.base_branches || ["master"];
+  const def = store.state.default_base_branch || branches[0];
+  select.innerHTML = branches
+    .map(
+      (b) =>
+        `<option value="${escapeHtml(b)}" ${b === def ? "selected" : ""}>${escapeHtml(b)}</option>`
+    )
+    .join("");
+  $("#remove-base-branch").disabled = branches.length <= 1;
+}
+
 // ------------------------- Shortcut recorder -------------------------
 
 const SPECIAL_KEYS = {
@@ -101,6 +116,30 @@ export function initSettings({ refresh, applyState }) {
   $("#default-ide-select").addEventListener("change", (e) => {
     const id = e.target.value;
     if (id) refresh(() => api.setDefaultIde(id));
+  });
+
+  // Fast-start base branches.
+  $("#base-branch-select").addEventListener("change", (e) => {
+    if (e.target.value) refresh(() => api.setDefaultBaseBranch(e.target.value));
+  });
+  $("#remove-base-branch").addEventListener("click", () => {
+    const name = $("#base-branch-select").value;
+    if (name) refresh(() => api.removeBaseBranch(name));
+  });
+  const addBranch = async () => {
+    const input = $("#new-base-branch");
+    const name = input.value.trim();
+    if (!name) return;
+    await refresh(() => api.addBaseBranch(name));
+    input.value = "";
+  };
+  $("#add-base-branch").addEventListener("click", addBranch);
+  $("#new-base-branch").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      addBranch();
+    }
+    e.stopPropagation();
   });
 
   // Global shortcut recorder.

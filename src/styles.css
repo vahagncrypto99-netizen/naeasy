@@ -522,6 +522,72 @@ body {
   width: 10px;
 }
 
+/* Hover actions on repo rows (repo link, fast-start) */
+.row .row-act {
+  display: none;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.row .row-act svg {
+  width: 13px;
+  height: 13px;
+}
+.row.repo:hover .row-act {
+  display: inline-flex;
+}
+.row .row-act:hover {
+  color: var(--text);
+  background: var(--accent-soft);
+}
+
+/* Fast-start popover */
+.fast-start {
+  position: absolute;
+  z-index: 50;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  padding: 9px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  width: 230px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.fast-start input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 7px 9px;
+  font-size: 12px;
+  outline: none;
+}
+.fast-start input:focus {
+  border-color: var(--accent);
+}
+.fast-start .fs-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.fast-start .fs-label {
+  color: var(--muted);
+  font-size: 11px;
+}
+.fast-start .fs-row .select {
+  flex: 1;
+  min-width: 0;
+}
+
 .hidden {
   display: none !important;
 }

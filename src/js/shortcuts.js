@@ -3,7 +3,7 @@
 
 import { $ } from "./dom.js";
 import { store } from "./store.js";
-import { render, moveSelection, hideIdePicker } from "./tree.js";
+import { render, moveSelection, hideIdePicker, hideFastStart } from "./tree.js";
 
 export function initKeyboard({ openProject }) {
   $("#search").addEventListener("input", (e) => {
@@ -13,6 +13,7 @@ export function initKeyboard({ openProject }) {
 
   document.addEventListener("keydown", (e) => {
     if (!$("#settings").classList.contains("hidden")) return; // settings open
+    if (!$("#fast-start").classList.contains("hidden")) return; // fast-start open
     if (e.metaKey || e.ctrlKey || e.altKey) return;
 
     // Navigation (works even while the search field has focus).
@@ -51,10 +52,11 @@ export function initKeyboard({ openProject }) {
     render();
   });
 
-  // Esc hides the window-like panels / popover.
+  // Esc hides the window-like panels / popovers.
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       hideIdePicker();
+      hideFastStart();
       if (!$("#settings").classList.contains("hidden")) {
         $("#settings").classList.add("hidden");
       }

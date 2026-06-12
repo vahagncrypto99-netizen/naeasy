@@ -15,7 +15,13 @@ let handlers = {
   addWorkspace: () => {},
   removeWorkspace: () => {},
   pickProjectIde: () => {},
+  openRepoUrl: () => {},
+  fastStart: () => {},
 };
+
+// Branch/link glyphs for the hover actions on repo rows.
+const ICON_LINK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>`;
+const ICON_BOLT = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
 
 const content = () => $("#content");
 
@@ -68,6 +74,8 @@ function renderNode(node, depth) {
   html += `<span class="label">${escapeHtml(node.name)}</span>`;
   if (node.is_repo) {
     html += metaHtml(node);
+    html += `<span class="row-act" data-fast-start="${escapeAttr(node.path)}" title="Fast-start: new branch + IDE">${ICON_BOLT}</span>`;
+    html += `<span class="row-act" data-repo-link="${escapeAttr(node.path)}" title="Open repository in browser">${ICON_LINK}</span>`;
     // The project's remembered IDE wins over the default one.
     const own = ideName((store.state.project_ides || {})[node.path]);
     const label = own || ideName(store.state.default_ide_id) || "set IDE";
@@ -213,6 +221,54 @@ export function hideIdePicker() {
   $("#ide-picker").classList.add("hidden");
 }
 
+// ------------------------- Fast-start popover -------------------------
+
+function showFastStart(anchorEl, projectPath) {
+  const fs = $("#fast-start");
+  const select = $("#fs-base");
+  const branches = store.state.base_branches || ["master"];
+  const current =
+    (store.state.project_base_branches || {})[projectPath] ||
+    store.state.default_base_branch ||
+    branches[0];
+  select.innerHTML = branches
+    .map(
+      (b) =>
+        `<option value="${escapeAttr(b)}" ${b === current ? "selected" : ""}>${escapeHtml(b)}</option>`
+    )
+    .join("");
+  fs.dataset.path = projectPath;
+  $("#fs-branch").value = "";
+
+  const rect = anchorEl.getBoundingClientRect();
+  fs.classList.remove("hidden");
+  const fw = fs.offsetWidth;
+  let left = rect.right - fw;
+  if (left < 8) left = 8;
+  let top = rect.bottom + 4;
+  if (top + fs.offsetHeight > window.innerHeight - 8) {
+    top = rect.top - fs.offsetHeight - 4;
+  }
+  fs.style.left = `${left}px`;
+  fs.style.top = `${top}px`;
+  $("#fs-branch").focus();
+}
+
+export function hideFastStart() {
+  $("#fast-start").classList.add("hidden");
+}
+
+function submitFastStart() {
+  const fs = $("#fast-start");
+  const branch = $("#fs-branch").value.trim();
+  if (!branch) {
+    setStatus("Enter a branch name");
+    return;
+  }
+  handlers.fastStart(fs.dataset.path, branch, $("#fs-base").value);
+  hideFastStart();
+}
+
 // ------------------------- Event wiring -------------------------
 
 export function initTree(h) {
@@ -223,6 +279,20 @@ export function initTree(h) {
     if (badge) {
       e.stopPropagation();
       showIdePicker(badge, badge.getAttribute("data-badge"));
+      return;
+    }
+
+    const repoLink = e.target.closest("[data-repo-link]");
+    if (repoLink) {
+      e.stopPropagation();
+      handlers.openRepoUrl(repoLink.getAttribute("data-repo-link"));
+      return;
+    }
+
+    const fastStart = e.target.closest("[data-fast-start]");
+    if (fastStart) {
+      e.stopPropagation();
+      showFastStart(fastStart, fastStart.getAttribute("data-fast-start"));
       return;
     }
 
@@ -272,5 +342,17 @@ export function initTree(h) {
     if (!e.target.closest("#ide-picker") && !e.target.closest("[data-badge]")) {
       hideIdePicker();
     }
+    if (!e.target.closest("#fast-start") && !e.target.closest("[data-fast-start]")) {
+      hideFastStart();
+    }
+  });
+
+  $("#fs-go").addEventListener("click", submitFastStart);
+  $("#fs-branch").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      submitFastStart();
+    }
+    e.stopPropagation(); // keep global type-to-search out of the input
   });
 }

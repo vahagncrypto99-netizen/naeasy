@@ -4,7 +4,13 @@ import * as api from "./api.js";
 import { $, setStatus } from "./dom.js";
 import { store, ideName, gatherRepos } from "./store.js";
 import { render, initTree } from "./tree.js";
-import { renderIdeList, initSettings, initAutostart, prettyAccel } from "./settings.js";
+import {
+  renderIdeList,
+  renderBranches,
+  initSettings,
+  initAutostart,
+  prettyAccel,
+} from "./settings.js";
 import { initKeyboard } from "./shortcuts.js";
 
 function applyState(data) {
@@ -17,6 +23,7 @@ function applyState(data) {
   $("#tabs-toggle").checked = !!store.state.open_in_tabs;
   render();
   renderIdeList();
+  renderBranches();
 }
 
 async function refresh(fn) {
@@ -83,6 +90,28 @@ initTree({
   pickProjectIde: async (path, ideId) => {
     await refresh(() => api.setProjectIde(path, ideId));
     openProject(path, ideId);
+  },
+  openRepoUrl: async (path) => {
+    try {
+      await api.openRepoUrl(path);
+    } catch (e) {
+      setStatus(String(e));
+    }
+  },
+  fastStart: async (path, branch, base) => {
+    setStatus(`Starting ${branch}…`);
+    try {
+      await api.fastStart(path, branch, base);
+      // Same launcher behavior as opening a project.
+      const search = $("#search");
+      search.value = "";
+      store.filter = "";
+      await refresh(() => api.getData()); // pick up remembered base + recents
+      api.hideWindow();
+      setStatus(`On ${branch}`);
+    } catch (e) {
+      setStatus(String(e));
+    }
   },
 });
 initSettings({ refresh, applyState });

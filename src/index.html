@@ -73,6 +73,20 @@
         <p class="hint">Keeps projects as tabs of one IDE window (JetBrains IDEs; needs Accessibility). Off — a new window per project.</p>
 
         <div class="section-row" style="margin-top:16px">
+          <span class="section-label">Fast-start base branches</span>
+          <button id="remove-base-branch" class="icon-btn" title="Remove the selected branch">✕</button>
+        </div>
+        <div class="select-row">
+          <span class="select-label">Default</span>
+          <select id="base-branch-select" class="select"></select>
+        </div>
+        <div class="select-row">
+          <input id="new-base-branch" class="search" type="text" placeholder="Add base branch, e.g. develop" autocomplete="off" spellcheck="false" />
+          <button id="add-base-branch" class="ghost-btn">Add</button>
+        </div>
+        <p class="hint">⚡ on a project creates a branch from the base (freshened from origin) and opens the IDE. Each project can remember its own base.</p>
+
+        <div class="section-row" style="margin-top:16px">
           <span class="section-label">Startup</span>
           <label class="switch">
             <input type="checkbox" id="autostart-toggle" />
@@ -90,6 +104,16 @@
 
     <!-- IDE picker popover (per project) -->
     <div id="ide-picker" class="ide-picker hidden"></div>
+
+    <!-- Fast-start popover (per project): branch name + base branch -->
+    <div id="fast-start" class="fast-start hidden">
+      <input id="fs-branch" type="text" placeholder="Branch name, e.g. HP-432" autocomplete="off" spellcheck="false" />
+      <div class="fs-row">
+        <span class="fs-label">from</span>
+        <select id="fs-base" class="select"></select>
+        <button id="fs-go" class="ghost-btn">Start</button>
+      </div>
+    </div>
 
     <script type="module" src="js/main.js"></script>
   </body>
