@@ -39,6 +39,19 @@ pub fn make_windows_join_all_spaces(app: &tauri::AppHandle) {
 #[cfg(not(target_os = "macos"))]
 pub fn make_windows_join_all_spaces(_app: &tauri::AppHandle) {}
 
+/// Anchor the main window under the tray icon (like every menu-bar app).
+/// Used by all show paths so the hotkey and tray click behave the same.
+fn position_main_under_tray(app: &tauri::AppHandle) {
+    if let (Some(tray), Some(window)) = (
+        app.tray_by_id("main-tray"),
+        app.get_webview_window("main"),
+    ) {
+        if let Ok(Some(rect)) = tray.rect() {
+            position_under_tray(&window, &rect);
+        }
+    }
+}
+
 /// Hide the main window (panel-aware).
 pub fn hide_main(app: &tauri::AppHandle) {
     #[cfg(target_os = "macos")]
@@ -66,6 +79,7 @@ pub fn toggle_main(app: &tauri::AppHandle) {
                 panel.order_out(None);
             } else {
                 make_windows_join_all_spaces(app);
+                position_main_under_tray(app);
                 panel.show();
             }
             return;
@@ -78,6 +92,7 @@ pub fn toggle_main(app: &tauri::AppHandle) {
             let _ = w.hide();
         } else {
             make_windows_join_all_spaces(app);
+            position_main_under_tray(app);
             let _ = w.unminimize();
             let _ = w.show();
             let _ = w.set_focus();
@@ -92,12 +107,14 @@ pub fn show_main(app: &tauri::AppHandle) {
         use tauri_nspanel::ManagerExt as _;
         if let Ok(panel) = app.get_webview_panel("main") {
             make_windows_join_all_spaces(app);
+            position_main_under_tray(app);
             panel.show();
             return;
         }
     }
     if let Some(w) = app.get_webview_window("main") {
         make_windows_join_all_spaces(app);
+        position_main_under_tray(app);
         let _ = w.show();
         let _ = w.unminimize();
         let _ = w.set_focus();
