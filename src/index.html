@@ -8,10 +8,11 @@
   </head>
   <body>
     <div class="app">
-      <header class="header" data-tauri-drag-region>
-        <div class="header-left" data-tauri-drag-region>
+      <!-- drag-region attrs are managed by JS: only the floating mode drags -->
+      <header class="header">
+        <div class="header-left">
           <span class="logo">⌘</span>
-          <span class="title" data-tauri-drag-region>naeasy</span>
+          <span class="title">naeasy</span>
         </div>
         <div class="header-actions">
           <button id="rescan" class="icon-btn" title="Rescan all workspaces">⟳</button>
@@ -80,6 +81,53 @@
           <button id="add-base-branch" class="ghost-btn">Add</button>
         </div>
         <p class="hint">Click a branch to make it the default, ✕ removes it. The branch button on a project creates a branch from the base (freshened from origin) and opens the IDE; each project can remember its own base.</p>
+
+        <div class="section-row" style="margin-top:16px">
+          <span class="section-label">Window</span>
+          <label class="switch">
+            <input type="checkbox" id="float-toggle" />
+            <span>Floating (movable)</span>
+          </label>
+        </div>
+        <p class="hint">Floating: drag the window anywhere — the position is remembered. Off — always opens pinned under the tray icon.</p>
+
+        <div class="section-row">
+          <span class="section-label">Size</span>
+          <label class="switch">
+            <input type="checkbox" id="fixed-toggle" />
+            <span>Fixed size</span>
+          </label>
+        </div>
+        <div class="select-row" id="fixed-size-row">
+          <select id="size-preset" class="select">
+            <option value="340x500">Compact · 340×500</option>
+            <option value="380x560">Default · 380×560</option>
+            <option value="440x680">Large · 440×680</option>
+            <option value="520x780">Extra · 520×780</option>
+          </select>
+          <button id="size-minus" class="icon-btn" title="Smaller">−</button>
+          <button id="size-plus" class="icon-btn" title="Bigger">+</button>
+        </div>
+        <p class="hint" id="size-hint">Off — resize like a normal window, the size is remembered.</p>
+
+        <div class="section-row" style="margin-top:16px">
+          <span class="section-label">Sections</span>
+        </div>
+        <div class="select-row">
+          <label class="switch" style="flex:1">
+            <input type="checkbox" id="recent-toggle" />
+            <span>Recent</span>
+          </label>
+          <input id="max-recent" class="search num" type="number" min="1" max="20" title="Max recent" />
+        </div>
+        <div class="select-row">
+          <label class="switch" style="flex:1">
+            <input type="checkbox" id="pinned-toggle" />
+            <span>Pinned</span>
+          </label>
+          <input id="max-pinned" class="search num" type="number" min="1" max="20" title="Max pinned" />
+        </div>
+        <p class="hint">Pin projects with the ★ on a project row. Numbers — how many entries each section shows.</p>
 
         <div class="section-row" style="margin-top:16px">
           <span class="section-label">Startup</span>

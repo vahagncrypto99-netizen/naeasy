@@ -7,6 +7,7 @@ import { render, initTree } from "./tree.js";
 import {
   renderIdeList,
   renderBranches,
+  renderPrefs,
   initSettings,
   initAutostart,
   closeSettings,
@@ -29,6 +30,7 @@ function applyState(data) {
   render();
   renderIdeList();
   renderBranches();
+  renderPrefs();
 }
 
 async function refresh(fn) {
@@ -99,6 +101,14 @@ initTree({
   openRepoUrl: async (path) => {
     try {
       await api.openRepoUrl(path);
+    } catch (e) {
+      setStatus(String(e));
+    }
+  },
+  togglePin: (path) => refresh(() => api.togglePin(path)),
+  openLastMr: async (path) => {
+    try {
+      await api.openLastMr(path);
     } catch (e) {
       setStatus(String(e));
     }

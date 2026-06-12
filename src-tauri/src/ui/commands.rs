@@ -132,6 +132,45 @@ pub fn set_shortcut(
     state.service.set_shortcut(accel)
 }
 
+/// Open the MR/PR list for the project's current branch.
+#[tauri::command]
+pub fn open_last_mr(state: State<AppState>, path: String) -> Result<(), String> {
+    let url = state.service.last_mr_url(&path)?;
+    tauri_plugin_opener::open_url(&url, None::<String>).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn toggle_pin(state: State<AppState>, path: String) -> Result<AppData, String> {
+    state.service.toggle_pin(path)
+}
+
+#[tauri::command]
+pub fn set_section_prefs(
+    state: State<AppState>,
+    show_recent: Option<bool>,
+    max_recent: Option<u32>,
+    show_pinned: Option<bool>,
+    max_pinned: Option<u32>,
+) -> Result<AppData, String> {
+    state
+        .service
+        .set_section_prefs(show_recent, max_recent, show_pinned, max_pinned)
+}
+
+/// Window mode prefs; geometry is applied to the live window immediately.
+#[tauri::command]
+pub fn set_window_prefs(
+    app: tauri::AppHandle,
+    state: State<AppState>,
+    float: Option<bool>,
+    fixed: Option<bool>,
+    fixed_size: Option<(u32, u32)>,
+) -> Result<AppData, String> {
+    let data = state.service.set_window_prefs(float, fixed, fixed_size)?;
+    super::tray::apply_window_geometry(&app);
+    Ok(data)
+}
+
 /// Hide the popover (used by the frontend after opening a project) — goes
 /// through the single hide path so transient UI gets reset without flashes.
 #[tauri::command]

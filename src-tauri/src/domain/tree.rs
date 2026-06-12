@@ -171,6 +171,14 @@ pub fn build_app_data(config: &Config) -> AppData {
         base_branches: config.base_branches.clone(),
         default_base_branch: config.default_base_branch.clone(),
         project_base_branches: config.project_base_branches.clone(),
+        window_float: config.window_float,
+        window_fixed: config.window_fixed,
+        fixed_size: config.fixed_size,
+        show_recent: config.show_recent,
+        max_recent: config.max_recent,
+        show_pinned: config.show_pinned,
+        max_pinned: config.max_pinned,
+        pinned: config.pinned.clone(),
     }
 }
 

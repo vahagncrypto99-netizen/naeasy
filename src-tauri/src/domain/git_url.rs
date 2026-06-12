@@ -48,6 +48,29 @@ fn assemble(host: &str, path: &str, aliases: &HashMap<String, String>) -> String
     format!("https://{host}/{path}")
 }
 
+/// URL of the merge-request / pull-request list for the repo, narrowed to
+/// `branch` when it's a feature branch (the closest thing to "the last MR"
+/// that works without API tokens).
+pub fn mr_list_url(web_url: &str, branch: Option<&str>) -> String {
+    let is_github = web_url.starts_with("https://github.com/");
+    match branch {
+        Some(b) if !b.is_empty() && b != "master" && b != "main" => {
+            if is_github {
+                format!("{web_url}/pulls?q=is%3Apr+head%3A{b}")
+            } else {
+                format!("{web_url}/-/merge_requests?scope=all&state=all&source_branch={b}")
+            }
+        }
+        _ => {
+            if is_github {
+                format!("{web_url}/pulls")
+            } else {
+                format!("{web_url}/-/merge_requests")
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -92,5 +115,26 @@ mod tests {
     fn rejects_garbage() {
         assert_eq!(web_url_from_remote("", &HashMap::new()), None);
         assert_eq!(web_url_from_remote("/local/path/repo", &HashMap::new()), None);
+    }
+
+    #[test]
+    fn mr_url_filters_by_feature_branch() {
+        assert_eq!(
+            mr_list_url("https://gitlab.com/g/r", Some("HP-432")),
+            "https://gitlab.com/g/r/-/merge_requests?scope=all&state=all&source_branch=HP-432"
+        );
+        assert_eq!(
+            mr_list_url("https://github.com/u/r", Some("HP-432")),
+            "https://github.com/u/r/pulls?q=is%3Apr+head%3AHP-432"
+        );
+    }
+
+    #[test]
+    fn mr_url_plain_list_on_main_branches() {
+        assert_eq!(
+            mr_list_url("https://gitlab.com/g/r", Some("master")),
+            "https://gitlab.com/g/r/-/merge_requests"
+        );
+        assert_eq!(mr_list_url("https://github.com/u/r", None), "https://github.com/u/r/pulls");
     }
 }

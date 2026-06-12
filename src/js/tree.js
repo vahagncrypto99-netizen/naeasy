@@ -3,7 +3,7 @@
 // so this module never calls the backend directly.
 
 import { $, escapeHtml, escapeAttr, setStatus } from "./dom.js";
-import { store, collapsed, saveCollapsed, ideName } from "./store.js";
+import { store, collapsed, saveCollapsed, ideName, allRepoMap } from "./store.js";
 import { recentEntries } from "./recents.js";
 
 // Inline SVG icons rendered inside rounded "chips".
@@ -17,12 +17,18 @@ let handlers = {
   pickProjectIde: () => {},
   openRepoUrl: () => {},
   fastStart: () => {},
+  togglePin: () => {},
+  openLastMr: () => {},
 };
 
 // Branch/link glyphs for the hover actions on repo rows.
 const ICON_LINK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>`;
 // "New branch": a git branch with a plus — the VS Code "create branch" idiom.
 const ICON_NEW_BRANCH = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="6" cy="18" r="2.6"/><circle cx="17" cy="6" r="2.6"/><path d="M17 8.6c0 4.6-4.6 6.4-8 7"/><line x1="17" y1="14" x2="17" y2="20"/><line x1="14" y1="17" x2="20" y2="17"/></svg>`;
+// Git merge — opens the MR/PR of the current branch.
+const ICON_MERGE = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="5" r="2.6"/><circle cx="6" cy="19" r="2.6"/><circle cx="18" cy="12" r="2.6"/><path d="M6 7.6v8.8"/><path d="M6 8c0 4 5 4 9.4 4"/></svg>`;
+const ICON_STAR = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2.5 15 8.8 22 9.8 17 14.6 18.2 21.5 12 18.2 5.8 21.5 7 14.6 2 9.8 9 8.8 12 2.5"/></svg>`;
+const ICON_STAR_FILLED = `<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round"><polygon points="12 2.5 15 8.8 22 9.8 17 14.6 18.2 21.5 12 18.2 5.8 21.5 7 14.6 2 9.8 9 8.8 12 2.5"/></svg>`;
 
 const content = () => $("#content");
 
@@ -75,7 +81,10 @@ function renderNode(node, depth) {
   html += `<span class="label">${escapeHtml(node.name)}</span>`;
   if (node.is_repo) {
     html += metaHtml(node);
+    const pinned = (store.state.pinned || []).includes(node.path);
+    html += `<span class="row-act ${pinned ? "act-pinned" : ""}" data-pin="${escapeAttr(node.path)}" title="${pinned ? "Unpin" : "Pin"}">${pinned ? ICON_STAR_FILLED : ICON_STAR}</span>`;
     html += `<span class="row-act" data-fast-start="${escapeAttr(node.path)}" title="New branch from base + open IDE">${ICON_NEW_BRANCH}</span>`;
+    html += `<span class="row-act" data-open-mr="${escapeAttr(node.path)}" title="Open MR/PR of the current branch">${ICON_MERGE}</span>`;
     html += `<span class="row-act" data-repo-link="${escapeAttr(node.path)}" title="Open repository in browser">${ICON_LINK}</span>`;
     // The project's remembered IDE wins over the default one.
     const own = ideName((store.state.project_ides || {})[node.path]);
@@ -103,18 +112,30 @@ export function render() {
 
   let html = "";
 
-  // Recent section (newest first) — shown only when not filtering.
+  // Pinned + Recent sections — shown only when not filtering.
   if (!store.filter) {
-    const recents = recentEntries();
-    if (recents.length) {
-      const rc = collapsed.has("recent");
+    const sections = [];
+    if (store.state.show_pinned) {
+      const repoMap = allRepoMap();
+      const pinned = (store.state.pinned || [])
+        .filter((p) => repoMap[p])
+        .slice(0, store.state.max_pinned || 3)
+        .map((p) => ({ path: p, name: repoMap[p] }));
+      if (pinned.length) sections.push(["pinned", "Pinned", pinned]);
+    }
+    if (store.state.show_recent) {
+      const recents = recentEntries(store.state.max_recent || 3);
+      if (recents.length) sections.push(["recent", "Recent", recents]);
+    }
+    for (const [key, label, entries] of sections) {
+      const rc = collapsed.has(key);
       html += `<div class="ws recents ${rc ? "collapsed" : ""}">`;
-      html += `<div class="ws-head" data-recent>`;
+      html += `<div class="ws-head" data-section="${key}">`;
       html += `<span class="twisty">${rc ? "▸" : "▾"}</span>`;
-      html += `<span class="ws-name">Recent</span>`;
-      html += `<span class="count">${recents.length}</span>`;
+      html += `<span class="ws-name">${label}</span>`;
+      html += `<span class="count">${entries.length}</span>`;
       html += `</div><div class="children">`;
-      for (const r of recents) {
+      for (const r of entries) {
         html += renderNode({ name: r.name, path: r.path, is_repo: true, children: [] }, 0);
       }
       html += `</div></div>`;
@@ -290,6 +311,20 @@ export function initTree(h) {
       return;
     }
 
+    const pin = e.target.closest("[data-pin]");
+    if (pin) {
+      e.stopPropagation();
+      handlers.togglePin(pin.getAttribute("data-pin"));
+      return;
+    }
+
+    const mr = e.target.closest("[data-open-mr]");
+    if (mr) {
+      e.stopPropagation();
+      handlers.openLastMr(mr.getAttribute("data-open-mr"));
+      return;
+    }
+
     const fastStart = e.target.closest("[data-fast-start]");
     if (fastStart) {
       e.stopPropagation();
@@ -311,9 +346,9 @@ export function initTree(h) {
       return;
     }
 
-    const recentHead = e.target.closest("[data-recent]");
-    if (recentHead) {
-      toggleCollapse("recent");
+    const sectionHead = e.target.closest("[data-section]");
+    if (sectionHead) {
+      toggleCollapse(sectionHead.getAttribute("data-section"));
       return;
     }
 

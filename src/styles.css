@@ -595,6 +595,26 @@ body.settings-open .app {
   color: var(--text);
   background: var(--fill-press);
 }
+/* A pinned project's star stays visible (accent), like the IDE badge. */
+.row .row-act.act-pinned {
+  display: inline-flex;
+  color: var(--accent);
+}
+.row.repo:hover .row-act.act-pinned {
+  color: var(--accent);
+}
+
+/* Narrow numeric inputs in settings */
+.search.num {
+  flex: 0 0 56px;
+  width: 56px;
+  text-align: center;
+  padding: 6px 4px;
+  -moz-appearance: textfield;
+}
+.search.num::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+}
 
 /* Fast-start popover */
 .fast-start {

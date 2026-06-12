@@ -53,6 +53,44 @@ export function renderBranches() {
     .join("");
 }
 
+// ------------------------- Window & sections prefs -------------------------
+
+export function renderPrefs() {
+  const s = store.state;
+  $("#float-toggle").checked = !!s.window_float;
+  $("#fixed-toggle").checked = !!s.window_fixed;
+  $("#fixed-size-row").style.display = s.window_fixed ? "flex" : "none";
+  if (s.window_fixed && s.fixed_size) {
+    const cur = `${s.fixed_size[0]}x${s.fixed_size[1]}`;
+    const preset = $("#size-preset");
+    const match = [...preset.options].find((o) => o.value === cur);
+    if (match) {
+      preset.value = cur;
+    } else {
+      // Custom size after +/- tweaks — show it as a transient option.
+      let custom = preset.querySelector("option[data-custom]");
+      if (!custom) {
+        custom = document.createElement("option");
+        custom.setAttribute("data-custom", "");
+        preset.appendChild(custom);
+      }
+      custom.value = cur;
+      custom.textContent = `Custom · ${s.fixed_size[0]}×${s.fixed_size[1]}`;
+      preset.value = cur;
+    }
+  }
+  $("#recent-toggle").checked = !!s.show_recent;
+  $("#max-recent").value = s.max_recent ?? 3;
+  $("#pinned-toggle").checked = !!s.show_pinned;
+  $("#max-pinned").value = s.max_pinned ?? 3;
+
+  // Dragging only makes sense for a floating window.
+  document.querySelectorAll(".header, .header-left, .title").forEach((el) => {
+    if (s.window_float) el.setAttribute("data-tauri-drag-region", "");
+    else el.removeAttribute("data-tauri-drag-region");
+  });
+}
+
 // ------------------------- Shortcut recorder -------------------------
 
 const SPECIAL_KEYS = {
@@ -158,6 +196,40 @@ export function initSettings({ refresh, applyState }) {
       addBranch();
     }
     e.stopPropagation();
+  });
+
+  // Window mode + size.
+  $("#float-toggle").addEventListener("change", (e) =>
+    refresh(() => api.setWindowPrefs({ float: e.target.checked }))
+  );
+  $("#fixed-toggle").addEventListener("change", (e) =>
+    refresh(() => api.setWindowPrefs({ fixed: e.target.checked }))
+  );
+  $("#size-preset").addEventListener("change", (e) => {
+    const [w, h] = e.target.value.split("x").map(Number);
+    if (w && h) refresh(() => api.setWindowPrefs({ fixedSize: [w, h] }));
+  });
+  const nudgeSize = (d) => {
+    const s = store.state.fixed_size || [380, 560];
+    refresh(() => api.setWindowPrefs({ fixedSize: [s[0] + d, s[1] + d] }));
+  };
+  $("#size-minus").addEventListener("click", () => nudgeSize(-20));
+  $("#size-plus").addEventListener("click", () => nudgeSize(20));
+
+  // Sections.
+  $("#recent-toggle").addEventListener("change", (e) =>
+    refresh(() => api.setSectionPrefs({ showRecent: e.target.checked }))
+  );
+  $("#pinned-toggle").addEventListener("change", (e) =>
+    refresh(() => api.setSectionPrefs({ showPinned: e.target.checked }))
+  );
+  $("#max-recent").addEventListener("change", (e) => {
+    const n = parseInt(e.target.value, 10);
+    if (n >= 1) refresh(() => api.setSectionPrefs({ maxRecent: n }));
+  });
+  $("#max-pinned").addEventListener("change", (e) => {
+    const n = parseInt(e.target.value, 10);
+    if (n >= 1) refresh(() => api.setSectionPrefs({ maxPinned: n }));
   });
 
   // Global shortcut recorder.

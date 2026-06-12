@@ -10,6 +10,8 @@ pub trait GitClient: Send + Sync {
     fn remote_url(&self, project_path: &str) -> Option<String>;
     /// Host alias -> real hostname pairs from ~/.ssh/config.
     fn ssh_aliases(&self) -> HashMap<String, String>;
+    /// The currently checked-out branch, if any.
+    fn current_branch(&self, project_path: &str) -> Option<String>;
     fn branch_exists(&self, project_path: &str, branch: &str) -> bool;
     fn checkout(&self, project_path: &str, branch: &str) -> Result<(), String>;
     /// Create `branch` from the freshest `base` available: tries
@@ -53,6 +55,12 @@ impl GitClient for SystemGitClient {
             return HashMap::new();
         };
         parse_ssh_aliases(&text)
+    }
+
+    fn current_branch(&self, project_path: &str) -> Option<String> {
+        git(project_path, &["rev-parse", "--abbrev-ref", "HEAD"])
+            .ok()
+            .filter(|b| !b.is_empty() && b != "HEAD")
     }
 
     fn branch_exists(&self, project_path: &str, branch: &str) -> bool {

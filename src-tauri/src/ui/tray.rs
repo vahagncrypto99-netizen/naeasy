@@ -51,9 +51,41 @@ pub fn make_windows_join_all_spaces(app: &tauri::AppHandle) {
 #[cfg(not(target_os = "macos"))]
 pub fn make_windows_join_all_spaces(_app: &tauri::AppHandle) {}
 
-/// Anchor the main window under the tray icon (like every menu-bar app).
-/// Used by all show paths so the hotkey and tray click behave the same.
+/// Apply the configured window geometry: fixed/resizable size and, in float
+/// mode, the remembered position. Called at startup and when prefs change.
+pub fn apply_window_geometry(app: &tauri::AppHandle) {
+    use tauri::{LogicalSize, PhysicalPosition, Position, Size};
+
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    let state = app.state::<crate::app::state::AppState>();
+    let (float, pos, fixed, (w, h)) = state.service.window_prefs();
+
+    let _ = window.set_resizable(!fixed);
+    let _ = window.set_size(Size::Logical(LogicalSize {
+        width: w as f64,
+        height: h as f64,
+    }));
+    if float {
+        if let Some((x, y)) = pos {
+            let _ = window.set_position(Position::Physical(PhysicalPosition { x, y }));
+        }
+    }
+}
+
+/// Position the window for showing: pinned mode anchors under the tray icon,
+/// float mode restores the remembered position (or stays where it is).
 fn position_main_under_tray(app: &tauri::AppHandle) {
+    let state = app.state::<crate::app::state::AppState>();
+    let (float, pos, _, _) = state.service.window_prefs();
+    if float {
+        if let (Some((x, y)), Some(window)) = (pos, app.get_webview_window("main")) {
+            use tauri::{PhysicalPosition, Position};
+            let _ = window.set_position(Position::Physical(PhysicalPosition { x, y }));
+        }
+        return;
+    }
     if let (Some(tray), Some(window)) = (
         app.tray_by_id("main-tray"),
         app.get_webview_window("main"),
@@ -66,7 +98,9 @@ fn position_main_under_tray(app: &tauri::AppHandle) {
 
 /// Hide the main window (panel-aware). The single hide path for every
 /// trigger — hotkey toggle, tray click, auto-hide, frontend, close button.
+/// Also the debounce point for persisting remembered window geometry.
 pub fn hide_main(app: &tauri::AppHandle) {
+    app.state::<crate::app::state::AppState>().service.persist();
     #[cfg(target_os = "macos")]
     {
         use tauri_nspanel::ManagerExt as _;
@@ -182,6 +216,7 @@ pub fn setup(app: &tauri::App) -> tauri::Result<()> {
                 ..
             } = event
             {
+                let _ = rect;
                 let app = tray.app_handle();
                 if let Some(window) = app.get_webview_window("main") {
                     let visible = window.is_visible().unwrap_or(false);
@@ -189,7 +224,7 @@ pub fn setup(app: &tauri::App) -> tauri::Result<()> {
                     if visible {
                         hide_main(app);
                     } else {
-                        position_under_tray(&window, &rect);
+                        // show_main positions per the window mode (pinned/float).
                         show_main(app);
                     }
                 }

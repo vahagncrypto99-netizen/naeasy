@@ -159,6 +159,9 @@ pub fn run() {
             // launch Space otherwise).
             ui::tray::make_windows_join_all_spaces(app.handle());
 
+            // Restore the configured geometry (size mode, float position).
+            ui::tray::apply_window_geometry(app.handle());
+
             // Show the window on first launch so the app is visibly "there".
             log::info!("showing main window on launch");
             ui::tray::show_main(app.handle());
@@ -186,16 +189,39 @@ pub fn run() {
             ui::commands::add_base_branch,
             ui::commands::remove_base_branch,
             ui::commands::set_default_base_branch,
-            ui::commands::hide_window
+            ui::commands::hide_window,
+            ui::commands::open_last_mr,
+            ui::commands::toggle_pin,
+            ui::commands::set_section_prefs,
+            ui::commands::set_window_prefs
         ])
         .on_window_event(|window, event| {
             // The red close button hides the window instead of quitting, so the
             // app keeps running. Reopen it from the Dock icon or menu-bar icon.
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                if window.label() == "main" {
+            if window.label() != "main" {
+                return;
+            }
+            match event {
+                // The red close button hides instead of quitting.
+                tauri::WindowEvent::CloseRequested { api, .. } => {
                     api.prevent_close();
                     ui::tray::hide_main(window.app_handle());
                 }
+                // Remember geometry in memory (persisted on hide). The
+                // service itself ignores these in pinned/fixed modes.
+                tauri::WindowEvent::Moved(pos) => {
+                    let state = window.app_handle().state::<AppState>();
+                    state.service.remember_window_pos(pos.x, pos.y);
+                }
+                tauri::WindowEvent::Resized(size) => {
+                    let scale = window.scale_factor().unwrap_or(1.0);
+                    let logical = size.to_logical::<f64>(scale);
+                    let state = window.app_handle().state::<AppState>();
+                    state
+                        .service
+                        .remember_window_size(logical.width as u32, logical.height as u32);
+                }
+                _ => {}
             }
         })
         .build(tauri::generate_context!())

@@ -312,6 +312,111 @@ impl WorkspaceService {
         Ok(build_app_data(&config))
     }
 
+    /// MR/PR list URL for the project's current branch ("open last MR").
+    pub fn last_mr_url(&self, project_path: &str) -> Result<String, String> {
+        let web = self.repo_web_url(project_path)?;
+        let branch = self.git.current_branch(project_path);
+        Ok(crate::domain::git_url::mr_list_url(&web, branch.as_deref()))
+    }
+
+    /// Pin/unpin a project. Pinning past the section limit is rejected.
+    pub fn toggle_pin(&self, project_path: String) -> Result<AppData, String> {
+        let mut config = self.config.lock().unwrap();
+        if let Some(i) = config.pinned.iter().position(|p| p == &project_path) {
+            config.pinned.remove(i);
+        } else {
+            if config.pinned.len() >= config.max_pinned as usize {
+                return Err(format!("Pinned limit reached ({})", config.max_pinned));
+            }
+            config.pinned.push(project_path);
+        }
+        self.repo.save(&config)?;
+        Ok(build_app_data(&config))
+    }
+
+    /// Recent/Pinned section preferences (None = leave unchanged).
+    pub fn set_section_prefs(
+        &self,
+        show_recent: Option<bool>,
+        max_recent: Option<u32>,
+        show_pinned: Option<bool>,
+        max_pinned: Option<u32>,
+    ) -> Result<AppData, String> {
+        let mut config = self.config.lock().unwrap();
+        if let Some(v) = show_recent {
+            config.show_recent = v;
+        }
+        if let Some(v) = max_recent {
+            config.max_recent = v.clamp(1, 20);
+        }
+        if let Some(v) = show_pinned {
+            config.show_pinned = v;
+        }
+        if let Some(v) = max_pinned {
+            config.max_pinned = v.clamp(1, 20);
+        }
+        self.repo.save(&config)?;
+        Ok(build_app_data(&config))
+    }
+
+    /// Window mode preferences (None = leave unchanged). Switching float off
+    /// drops the remembered position — pinned mode anchors under the tray.
+    pub fn set_window_prefs(
+        &self,
+        float: Option<bool>,
+        fixed: Option<bool>,
+        fixed_size: Option<(u32, u32)>,
+    ) -> Result<AppData, String> {
+        let mut config = self.config.lock().unwrap();
+        if let Some(v) = float {
+            config.window_float = v;
+            if !v {
+                config.window_pos = None;
+            }
+        }
+        if let Some(v) = fixed {
+            config.window_fixed = v;
+        }
+        if let Some((w, h)) = fixed_size {
+            config.fixed_size = (w.clamp(280, 1200), h.clamp(360, 1400));
+        }
+        self.repo.save(&config)?;
+        Ok(build_app_data(&config))
+    }
+
+    /// In-memory notes from window move/resize events; persisted on hide.
+    pub fn remember_window_pos(&self, x: i32, y: i32) {
+        let mut config = self.config.lock().unwrap();
+        if config.window_float {
+            config.window_pos = Some((x, y));
+        }
+    }
+
+    pub fn remember_window_size(&self, w: u32, h: u32) {
+        let mut config = self.config.lock().unwrap();
+        if !config.window_fixed {
+            config.window_size = Some((w, h));
+        }
+    }
+
+    /// Persist the current in-memory config (used on window hide so frequent
+    /// move/resize events don't hammer the disk).
+    pub fn persist(&self) {
+        let config = self.config.lock().unwrap();
+        let _ = self.repo.save(&config);
+    }
+
+    /// Window geometry for the show path: (float, saved_pos, fixed, size).
+    pub fn window_prefs(&self) -> (bool, Option<(i32, i32)>, bool, (u32, u32)) {
+        let config = self.config.lock().unwrap();
+        let size = if config.window_fixed {
+            config.fixed_size
+        } else {
+            config.window_size.unwrap_or(crate::domain::models::default_fixed_size())
+        };
+        (config.window_float, config.window_pos, config.window_fixed, size)
+    }
+
     /// Persist a new shortcut accelerator (registration with the OS is the
     /// UI layer's job — it owns the Tauri app handle).
     pub fn set_shortcut(&self, accel: String) -> Result<AppData, String> {
@@ -404,6 +509,9 @@ mod tests {
         }
         fn ssh_aliases(&self) -> HashMap<String, String> {
             HashMap::from([("gitlab-crypto".to_string(), "gitlab.com".to_string())])
+        }
+        fn current_branch(&self, _p: &str) -> Option<String> {
+            Some("HP-432".to_string())
         }
         fn branch_exists(&self, _p: &str, branch: &str) -> bool {
             self.existing_branches.iter().any(|b| b == branch)
@@ -673,6 +781,56 @@ mod tests {
     fn repo_web_url_errors_without_remote() {
         let (service, _) = service_with(vec![]);
         assert!(service.repo_web_url("/p").is_err());
+    }
+
+    #[test]
+    fn last_mr_url_uses_current_branch() {
+        let git = FakeGitClient {
+            remote: Some("git@gitlab-crypto:group/repo.git".into()),
+            ..Default::default()
+        };
+        let (service, _, _) = service_with_git(vec![], git);
+        assert_eq!(
+            service.last_mr_url("/p").unwrap(),
+            "https://gitlab.com/group/repo/-/merge_requests?scope=all&state=all&source_branch=HP-432"
+        );
+    }
+
+    #[test]
+    fn pin_toggle_respects_limit() {
+        let (service, repo) = service_with(vec![]);
+        service.toggle_pin("/a".into()).unwrap();
+        service.toggle_pin("/b".into()).unwrap();
+        service.toggle_pin("/c".into()).unwrap();
+        assert!(service.toggle_pin("/d".into()).is_err(), "default limit is 3");
+
+        // Unpin frees a slot; raising the limit allows more.
+        service.toggle_pin("/a".into()).unwrap();
+        service.toggle_pin("/d".into()).unwrap();
+        service.set_section_prefs(None, None, None, Some(4)).unwrap();
+        let data = service.toggle_pin("/e".into()).unwrap();
+        assert_eq!(data.pinned, ["/b", "/c", "/d", "/e"]);
+        assert_eq!(repo.load().pinned.len(), 4);
+    }
+
+    #[test]
+    fn window_prefs_flow() {
+        let (service, repo) = service_with(vec![]);
+        // Defaults: pinned, resizable, base size.
+        assert_eq!(service.window_prefs(), (false, None, false, (380, 560)));
+
+        service.set_window_prefs(Some(true), None, None).unwrap();
+        service.remember_window_pos(100, 200);
+        service.remember_window_size(500, 700);
+        service.persist();
+        assert_eq!(service.window_prefs(), (true, Some((100, 200)), false, (500, 700)));
+        assert_eq!(repo.load().window_pos, Some((100, 200)));
+
+        // Fixed mode uses fixed_size; leaving float drops the position.
+        service
+            .set_window_prefs(Some(false), Some(true), Some((400, 600)))
+            .unwrap();
+        assert_eq!(service.window_prefs(), (false, None, true, (400, 600)));
     }
 
     #[test]

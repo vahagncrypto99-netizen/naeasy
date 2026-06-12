@@ -46,6 +46,35 @@ pub struct Config {
     /// Per-project base-branch override (path -> branch name).
     #[serde(default)]
     pub project_base_branches: std::collections::HashMap<String, String>,
+    /// Floating window: draggable, position remembered. Off = pinned under
+    /// the tray icon.
+    #[serde(default)]
+    pub window_float: bool,
+    /// Remembered window position (physical px), float mode only.
+    #[serde(default)]
+    pub window_pos: Option<(i32, i32)>,
+    /// Fixed-size window: not resizable, size taken from `fixed_size`.
+    #[serde(default)]
+    pub window_fixed: bool,
+    /// Remembered window size (logical px), resizable mode.
+    #[serde(default)]
+    pub window_size: Option<(u32, u32)>,
+    /// The size used in fixed mode.
+    #[serde(default = "default_fixed_size")]
+    pub fixed_size: (u32, u32),
+    /// "Recent" section visibility and its max entries.
+    #[serde(default = "default_true")]
+    pub show_recent: bool,
+    #[serde(default = "default_section_max")]
+    pub max_recent: u32,
+    /// "Pinned" section visibility and its max entries.
+    #[serde(default = "default_true")]
+    pub show_pinned: bool,
+    #[serde(default = "default_section_max")]
+    pub max_pinned: u32,
+    /// Pinned project paths, in pin order.
+    #[serde(default)]
+    pub pinned: Vec<String>,
 }
 
 fn default_true() -> bool {
@@ -58,6 +87,14 @@ pub fn default_base_branch() -> String {
 
 fn default_base_branches() -> Vec<String> {
     vec!["master".to_string()]
+}
+
+pub fn default_fixed_size() -> (u32, u32) {
+    (380, 560)
+}
+
+fn default_section_max() -> u32 {
+    3
 }
 
 impl Default for Config {
@@ -73,6 +110,16 @@ impl Default for Config {
             base_branches: default_base_branches(),
             default_base_branch: default_base_branch(),
             project_base_branches: Default::default(),
+            window_float: false,
+            window_pos: None,
+            window_fixed: false,
+            window_size: None,
+            fixed_size: default_fixed_size(),
+            show_recent: true,
+            max_recent: default_section_max(),
+            show_pinned: true,
+            max_pinned: default_section_max(),
+            pinned: Vec::new(),
         }
     }
 }
@@ -142,6 +189,14 @@ pub struct AppData {
     pub base_branches: Vec<String>,
     pub default_base_branch: String,
     pub project_base_branches: std::collections::HashMap<String, String>,
+    pub window_float: bool,
+    pub window_fixed: bool,
+    pub fixed_size: (u32, u32),
+    pub show_recent: bool,
+    pub max_recent: u32,
+    pub show_pinned: bool,
+    pub max_pinned: u32,
+    pub pinned: Vec<String>,
 }
 
 #[cfg(test)]
