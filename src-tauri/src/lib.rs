@@ -98,14 +98,17 @@ pub fn run() {
                     .get_webview_window("main")
                     .expect("main window must exist");
 
-                // Native translucent material under the UI (menu-like look,
-                // follows the system light/dark appearance). Radius matches
-                // the CSS .app border-radius.
+                // Native translucent material under the UI (popover glass,
+                // follows the system light/dark appearance). State must be
+                // forced to Active: a non-activating panel is never "active"
+                // in AppKit terms, and the default FollowsWindowActiveState
+                // renders the material flat and opaque. Radius matches the
+                // CSS .app border-radius.
                 if let Err(e) = window_vibrancy::apply_vibrancy(
                     &w,
-                    window_vibrancy::NSVisualEffectMaterial::Menu,
-                    None,
-                    Some(14.0),
+                    window_vibrancy::NSVisualEffectMaterial::Popover,
+                    Some(window_vibrancy::NSVisualEffectState::Active),
+                    Some(16.0),
                 ) {
                     log::warn!("vibrancy not applied: {e}");
                 }

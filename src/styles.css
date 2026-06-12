@@ -43,15 +43,15 @@
 /* macOS: nearly transparent surfaces over the native vibrancy material —
    the system draws the widget glass, CSS only tints it. */
 body.mac {
-  --bg: rgba(30, 30, 32, 0.42);
-  --bg-panel: rgba(30, 30, 32, 0.88);
-  --popover: rgba(43, 43, 45, 0.92);
+  --bg: rgba(30, 30, 32, 0.16);
+  --bg-panel: rgba(30, 30, 32, 0.55);
+  --popover: rgba(43, 43, 45, 0.7);
 }
 @media (prefers-color-scheme: light) {
   body.mac {
-    --bg: rgba(242, 242, 242, 0.45);
-    --bg-panel: rgba(244, 244, 244, 0.92);
-    --popover: rgba(248, 248, 248, 0.94);
+    --bg: rgba(246, 246, 246, 0.2);
+    --bg-panel: rgba(246, 246, 246, 0.6);
+    --popover: rgba(250, 250, 250, 0.72);
   }
 }
 
