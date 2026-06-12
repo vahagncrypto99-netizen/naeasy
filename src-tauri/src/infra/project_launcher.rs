@@ -49,8 +49,16 @@ impl ProjectLauncher for MacLauncher {
         if focus_existing_window(app_path, project_path) {
             return Ok(());
         }
-        // 2. Otherwise launch / open it. `open -a` also focuses an existing
-        //    project window for IDEs that support it (JetBrains, VS Code, …).
+
+        // 2. Tab mode is enforced at the AppKit level: with the per-app
+        //    AppleWindowTabbingMode=always default the IDE opens every new
+        //    window as a native tab of the existing one — on whatever Space
+        //    it lives, no Accessibility involved. Toggling off removes the
+        //    override (back to the IDE's stock behavior).
+        set_window_tabbing_mode(app_path, in_tabs);
+
+        // 3. Launch / open. `open -a` also focuses an existing project
+        //    window for IDEs that support it (JetBrains, VS Code, …).
         Command::new("open")
             .arg("-a")
             .arg(app_path)
@@ -89,6 +97,46 @@ impl ProjectLauncher for MacLauncher {
             .spawn()
             .map_err(|e| e.to_string())?;
         Ok(())
+    }
+}
+
+/// Enforce (or lift) the per-app "new windows open as native tabs" default.
+/// `defaults write <bundle-id> AppleWindowTabbingMode always` is what e.g.
+/// VS Code's `window.nativeTabs` does under the hood; JetBrains IDEs honor
+/// native tabbing since 2024.2. Works across Spaces because AppKit attaches
+/// the tab in-process, no window scripting involved.
+#[cfg(target_os = "macos")]
+fn set_window_tabbing_mode(app_path: &str, in_tabs: bool) {
+    use std::process::Command;
+
+    let info_plist = format!("{}/Contents/Info", app_path.trim_end_matches('/'));
+    let bundle_id = match Command::new("defaults")
+        .args(["read", &info_plist, "CFBundleIdentifier"])
+        .output()
+    {
+        Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout).trim().to_string(),
+        _ => return, // not a bundle (CLI editor etc.) — nothing to set
+    };
+    if bundle_id.is_empty() {
+        return;
+    }
+
+    let result = if in_tabs {
+        Command::new("defaults")
+            .args(["write", &bundle_id, "AppleWindowTabbingMode", "-string", "always"])
+            .status()
+    } else {
+        // Removing a missing key fails — that's fine, treat as success.
+        let _ = Command::new("defaults")
+            .args(["delete", &bundle_id, "AppleWindowTabbingMode"])
+            .status();
+        return;
+    };
+    match result {
+        Ok(s) if s.success() => {
+            log::info!("tabbing mode 'always' set for {bundle_id}");
+        }
+        other => log::warn!("failed to set tabbing mode for {bundle_id}: {other:?}"),
     }
 }
 
@@ -218,19 +266,29 @@ return "SKIP""#,
         proj = proj_q
     );
 
-    for _ in 0..6 {
+    for attempt in 1..=6 {
         sleep(Duration::from_millis(2000));
         match Command::new("osascript").arg("-e").arg(&script).output() {
-            Ok(out) if String::from_utf8_lossy(&out.stdout).contains("MERGED") => {
-                // Bring the merged tab forward — the tab group may live on
-                // another Space (e.g. the fullscreen IDE window).
-                sleep(Duration::from_millis(700));
-                focus_window_of(proc_name, project_name);
+            Ok(out) => {
+                let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+                log::info!("merge[{attempt}] {proc_name}/{project_name}: {stdout} {stderr}");
+                if stdout.contains("MERGED") {
+                    // Bring the merged tab forward — the tab group may live
+                    // on another Space (e.g. the fullscreen IDE window).
+                    sleep(Duration::from_millis(700));
+                    focus_window_of(proc_name, project_name);
+                    return;
+                }
+                if stdout.contains("WAIT") {
+                    continue;
+                }
                 return;
             }
-            Ok(out) if String::from_utf8_lossy(&out.stdout).contains("WAIT") => continue,
-            Ok(_) => return,
-            Err(_) => return,
+            Err(e) => {
+                log::warn!("merge[{attempt}] {proc_name}: osascript failed: {e}");
+                return;
+            }
         }
     }
 }
