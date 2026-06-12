@@ -61,11 +61,17 @@ impl ProjectLauncher for MacLauncher {
 
         // 3. Tab mode: once the new project window appears, merge the IDE's
         //    windows into native macOS tabs (best-effort, in the background —
-        //    works for IDEs whose Window menu has "Merge All Windows", e.g.
+        //    works for IDEs whose Window menu has a merge action, e.g.
         //    JetBrains; silently does nothing for the rest).
         if in_tabs {
             let proc_name = process_name_for(app_path);
-            std::thread::spawn(move || merge_windows_when_ready(&proc_name));
+            let project_name = std::path::Path::new(project_path)
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
+            if !project_name.is_empty() {
+                std::thread::spawn(move || merge_windows_when_ready(&proc_name, &project_name));
+            }
         }
         Ok(())
     }
@@ -108,7 +114,6 @@ fn process_name_for(app_path: &str) -> String {
 #[cfg(target_os = "macos")]
 fn focus_existing_window(app_path: &str, project_path: &str) -> bool {
     use std::path::Path;
-    use std::process::Command;
 
     let proc_name = process_name_for(app_path);
     let project_name = Path::new(project_path)
@@ -118,9 +123,17 @@ fn focus_existing_window(app_path: &str, project_path: &str) -> bool {
     if project_name.is_empty() {
         return false;
     }
+    focus_window_of(&proc_name, &project_name)
+}
 
-    let app_q = applescript_quote(&proc_name);
-    let proj_q = applescript_quote(&project_name);
+/// Raise + focus the window (or native tab) of `proc_name` whose title
+/// contains `project_name`.
+#[cfg(target_os = "macos")]
+fn focus_window_of(proc_name: &str, project_name: &str) -> bool {
+    use std::process::Command;
+
+    let app_q = applescript_quote(proc_name);
+    let proj_q = applescript_quote(project_name);
 
     // Match windows whose title contains the project name. JetBrains and most
     // editors put the project folder name in the window title.
@@ -163,24 +176,33 @@ fn applescript_quote(s: &str) -> String {
     format!("\"{escaped}\"")
 }
 
-/// Poll the IDE for up to ~12s; as soon as it has more than one window, click
-/// the merge action in its Window menu so projects become native macOS tabs.
+/// Poll the IDE for up to ~12s; as soon as the freshly opened project's
+/// window appears, click the merge action in its Window menu so projects
+/// become native macOS tabs, then raise the project's tab.
+///
+/// Waiting for the PROJECT window (not "window count > 1") matters: the
+/// Accessibility API only sees windows on the active Space, so an IDE window
+/// living on another (e.g. fullscreen) Space is invisible to a count check —
+/// while the new window always opens on the current Space. The IDE-level
+/// merge action then collects windows across Spaces.
+///
 /// JetBrains IDEs name it "Merge All Project Windows" (2024.2+); standard
 /// AppKit apps (incl. VS Code with `window.nativeTabs`) — "Merge All Windows".
 /// Best-effort: needs Accessibility (already required for focus/scan); a
 /// silent no-op for IDEs that have neither menu item.
 #[cfg(target_os = "macos")]
-fn merge_windows_when_ready(proc_name: &str) {
+fn merge_windows_when_ready(proc_name: &str, project_name: &str) {
     use std::process::Command;
     use std::thread::sleep;
     use std::time::Duration;
 
     let app_q = applescript_quote(proc_name);
+    let proj_q = applescript_quote(project_name);
     let script = format!(
         r#"tell application "System Events"
     if not (exists (process {app})) then return "SKIP"
     tell process {app}
-        if (count of windows) < 2 then return "SKIP"
+        if not (exists (window whose name contains {proj})) then return "WAIT"
         try
             click menu item "Merge All Project Windows" of menu "Window" of menu bar item "Window" of menu bar 1
             return "MERGED"
@@ -192,14 +214,22 @@ fn merge_windows_when_ready(proc_name: &str) {
     end tell
 end tell
 return "SKIP""#,
-        app = app_q
+        app = app_q,
+        proj = proj_q
     );
 
     for _ in 0..6 {
         sleep(Duration::from_millis(2000));
         match Command::new("osascript").arg("-e").arg(&script).output() {
-            Ok(out) if String::from_utf8_lossy(&out.stdout).contains("MERGED") => return,
-            Ok(_) => continue,
+            Ok(out) if String::from_utf8_lossy(&out.stdout).contains("MERGED") => {
+                // Bring the merged tab forward — the tab group may live on
+                // another Space (e.g. the fullscreen IDE window).
+                sleep(Duration::from_millis(700));
+                focus_window_of(proc_name, project_name);
+                return;
+            }
+            Ok(out) if String::from_utf8_lossy(&out.stdout).contains("WAIT") => continue,
+            Ok(_) => return,
             Err(_) => return,
         }
     }
