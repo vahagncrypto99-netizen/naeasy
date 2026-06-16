@@ -74,12 +74,21 @@ pub fn run() {
                 Arc::new(infra::git::SystemGitClient),
             );
             let shortcut_accel = service.shortcut();
-            app.manage(AppState { service });
+            app.manage(AppState {
+                service,
+                layout_provider: infra::keyboard_layouts::platform_layout_provider(),
+            });
 
             // Register the global hotkey that toggles the window.
             if let Err(e) = ShortcutService::register(app.handle(), &shortcut_accel) {
                 log::warn!("global shortcut '{shortcut_accel}' not registered: {e}");
             }
+
+            // Re-emit keyboard-layout maps to the frontend whenever the user
+            // adds/removes/changes a layout. Registered on the main thread so
+            // the notification callback runs there too.
+            #[cfg(target_os = "macos")]
+            infra::keyboard_layouts::watch_layout_changes(app.handle().clone());
 
             // Build the tray icon (menu-bar entry).
             ui::tray::setup(app)?;
@@ -170,6 +179,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             ui::commands::get_data,
+            ui::commands::get_layout_maps,
             ui::commands::rescan,
             ui::commands::add_workspace,
             ui::commands::remove_workspace,

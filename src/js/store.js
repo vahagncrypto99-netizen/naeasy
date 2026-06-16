@@ -4,6 +4,7 @@
 export const store = {
   state: { workspaces: [], ides: [], default_ide_id: null, recents: {}, shortcut: "" },
   filter: "",
+  layoutMaps: [], // installed keyboard layouts as { id, map: {char: latin} } (from the OS)
   openNow: {}, // project folder name -> IDE process name (currently open)
   selectedPath: null, // keyboard-selected project row
 };

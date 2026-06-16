@@ -67,6 +67,20 @@ async function openProject(path, ideId) {
   }
 }
 
+// ------------------------- Keyboard layouts -------------------------
+
+// Pull the OS keyboard-layout maps into the store so search can convert a
+// query typed under the wrong layout. Re-render if a filter is active so
+// results update immediately. Best-effort: empty on unsupported platforms.
+async function refreshLayoutMaps() {
+  try {
+    store.layoutMaps = (await api.getLayoutMaps()) || [];
+    if (store.filter) render();
+  } catch {
+    store.layoutMaps = [];
+  }
+}
+
 // ------------------------- Open-now detection -------------------------
 
 async function refreshOpenNow() {
@@ -143,6 +157,14 @@ const resetTransientUi = () => {
 api.onHidden(resetTransientUi);
 api.onShown(resetTransientUi);
 
+// Keep layout maps fresh: the backend pushes a new set when layouts change,
+// and we re-pull on every window show as a fallback for any missed event.
+api.onLayoutsChanged((e) => {
+  store.layoutMaps = e.payload || [];
+  if (store.filter) render();
+});
+api.onShown(refreshLayoutMaps);
+
 $("#add-workspace").addEventListener("click", addWorkspace);
 $("#rescan").addEventListener("click", () => {
   setStatus("Rescanning…");
@@ -158,6 +180,7 @@ $("#rescan").addEventListener("click", () => {
     }
     applyState(data);
     initAutostart();
+    refreshLayoutMaps();
     refreshOpenNow();
     setInterval(refreshOpenNow, 6000);
     window.addEventListener("focus", refreshOpenNow);

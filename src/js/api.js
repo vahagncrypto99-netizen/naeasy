@@ -7,6 +7,7 @@ const autostartPlugin = window.__TAURI__.autostart;
 const getCurrentWindow = window.__TAURI__.window?.getCurrentWindow;
 
 export const getData = () => invoke("get_data");
+export const getLayoutMaps = () => invoke("get_layout_maps");
 export const rescan = () => invoke("rescan");
 export const addWorkspace = (path) => invoke("add_workspace", { path });
 export const removeWorkspace = (id) => invoke("remove_workspace", { id });
@@ -49,6 +50,9 @@ export function hideWindow() {
   });
 }
 
+/// Fires when the set of installed keyboard layouts changes (added/removed/
+/// changed) — payload is the rebuilt layout maps for layout-aware search.
+export const onLayoutsChanged = (cb) => window.__TAURI__.event.listen("layouts-changed", cb);
 /// Fires every time the popover window is shown (hotkey, tray, dock reopen).
 export const onShown = (cb) => window.__TAURI__.event.listen("naeasy://shown", cb);
 /// Fires right after the window hides — reset transient UI invisibly.

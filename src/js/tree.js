@@ -5,6 +5,7 @@
 import { $, escapeHtml, escapeAttr, setStatus } from "./dom.js";
 import { store, collapsed, saveCollapsed, ideName, allRepoMap } from "./store.js";
 import { recentEntries } from "./recents.js";
+import { matches } from "./match.js";
 
 // Inline SVG icons rendered inside rounded "chips".
 const ICON_FOLDER = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h3.8l2 2H19.5A1.5 1.5 0 0 1 21 9.5v7A1.5 1.5 0 0 1 19.5 18h-15A1.5 1.5 0 0 1 3 16.5z"/></svg>`;
@@ -62,7 +63,9 @@ function metaHtml(node) {
 
 function matchesFilter(node) {
   if (!store.filter) return true;
-  if (node.name.toLowerCase().includes(store.filter)) return true;
+  // Layout-aware + typo-tolerant matching (see match.js). A group stays
+  // visible when any descendant matches.
+  if (matches(store.filter, node.name, store.layoutMaps)) return true;
   return node.children.some(matchesFilter);
 }
 

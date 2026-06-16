@@ -3,5 +3,6 @@
 pub mod config_repository;
 pub mod git;
 pub mod ide_detector;
+pub mod keyboard_layouts;
 pub mod project_launcher;
 pub mod shortcut;

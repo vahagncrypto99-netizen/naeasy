@@ -5,11 +5,19 @@ use tauri::State;
 
 use crate::app::state::AppState;
 use crate::domain::models::AppData;
+use crate::infra::keyboard_layouts::LayoutMap;
 use crate::infra::shortcut::ShortcutService;
 
 #[tauri::command]
 pub fn get_data(state: State<AppState>) -> AppData {
     state.service.app_data()
+}
+
+/// Installed keyboard-layout maps for layout-aware search. Built fresh from the
+/// OS (empty on platforms without a provider).
+#[tauri::command]
+pub fn get_layout_maps(state: State<AppState>) -> Vec<LayoutMap> {
+    state.layout_provider.layouts()
 }
 
 #[tauri::command]
