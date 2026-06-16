@@ -6,7 +6,7 @@ export const store = {
   filter: "",
   layoutMaps: [], // installed keyboard layouts as { id, map: {char: latin} } (from the OS)
   openNow: {}, // project folder name -> IDE process name (currently open)
-  selectedPath: null, // keyboard-selected project row
+  selectedRowId: null, // keyboard-selected project row, keyed by "<scope> <path>"
 };
 
 // Collapsed-node memory (persisted across launches).

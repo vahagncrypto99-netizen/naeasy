@@ -69,7 +69,7 @@ function matchesFilter(node) {
   return node.children.some(matchesFilter);
 }
 
-function renderNode(node, depth) {
+function renderNode(node, depth, scope) {
   if (!matchesFilter(node)) return "";
   const hasChildren = node.children.length > 0;
   const isCollapsed = collapsed.has(node.path) && !store.filter;
@@ -78,7 +78,7 @@ function renderNode(node, depth) {
   const icon = node.is_repo ? ICON_REPO : ICON_FOLDER;
 
   let html = `<div class="node ${isCollapsed ? "collapsed" : ""}">`;
-  html += `<div class="row ${cls}" data-path="${escapeAttr(node.path)}" data-repo="${node.is_repo}" data-name="${escapeAttr(node.name)}">`;
+  html += `<div class="row ${cls}" data-path="${escapeAttr(node.path)}" data-repo="${node.is_repo}" data-name="${escapeAttr(node.name)}" data-scope="${escapeAttr(scope)}">`;
   html += `<span class="twisty">${twisty}</span>`;
   html += `<span class="chip ${cls}-chip">${icon}</span>`;
   html += `<span class="label">${escapeHtml(node.name)}</span>`;
@@ -97,7 +97,7 @@ function renderNode(node, depth) {
   html += `</div>`;
   if (hasChildren) {
     html += `<div class="children">`;
-    for (const child of node.children) html += renderNode(child, depth + 1);
+    for (const child of node.children) html += renderNode(child, depth + 1, scope);
     html += `</div>`;
   }
   html += `</div>`;
@@ -139,7 +139,7 @@ export function render() {
       html += `<span class="count">${entries.length}</span>`;
       html += `</div><div class="children">`;
       for (const r of entries) {
-        html += renderNode({ name: r.name, path: r.path, is_repo: true, children: [] }, 0);
+        html += renderNode({ name: r.name, path: r.path, is_repo: true, children: [] }, 0, key);
       }
       html += `</div></div>`;
     }
@@ -155,7 +155,7 @@ export function render() {
     html += `<span class="ws-remove" data-remove-ws="${ws.id}" title="Remove workspace">✕</span>`;
     html += `</div>`;
     html += `<div class="children">`;
-    for (const child of ws.tree.children) html += renderNode(child, 0);
+    for (const child of ws.tree.children) html += renderNode(child, 0, "tree");
     html += `</div></div>`;
   }
   el.innerHTML = html;
@@ -166,24 +166,41 @@ export function render() {
 // ------------------------- Keyboard selection -------------------------
 
 function visibleRepoRows() {
-  // Exclude the Recent section so arrow navigation only walks the main tree.
+  // Every visible repo row is navigable — Pinned, Recent, and the main tree —
+  // in DOM order (top-to-bottom). Collapsed rows fall out via offsetParent.
   return [...content().querySelectorAll(".row.repo")].filter(
-    (r) => r.offsetParent !== null && !r.closest(".recents")
+    (r) => r.offsetParent !== null
   );
 }
 
+// A project can appear in several sections (Pinned/Recent duplicate tree rows),
+// so selection identity is the row's section scope + path, not the path alone.
+// This keeps each copy a distinct stop and highlights exactly one at a time.
+function rowId(r) {
+  return `${r.dataset.scope} ${r.dataset.path}`;
+}
+
+function selectedRow() {
+  return visibleRepoRows().find((r) => rowId(r) === store.selectedRowId) || null;
+}
+
+// Path of the currently selected row (for Enter-to-open). Null if nothing selected.
+export function selectedProjectPath() {
+  return selectedRow()?.dataset.path || null;
+}
+
 function applySelection(rows) {
-  rows.forEach((r) => r.classList.toggle("selected", r.dataset.path === store.selectedPath));
+  rows.forEach((r) => r.classList.toggle("selected", rowId(r) === store.selectedRowId));
 }
 
 export function updateSelection() {
   const rows = visibleRepoRows();
   if (!rows.length) {
-    store.selectedPath = null;
+    store.selectedRowId = null;
     return;
   }
-  if (!rows.some((r) => r.dataset.path === store.selectedPath)) {
-    store.selectedPath = rows[0].dataset.path;
+  if (!rows.some((r) => rowId(r) === store.selectedRowId)) {
+    store.selectedRowId = rowId(rows[0]);
   }
   applySelection(rows);
 }
@@ -191,9 +208,9 @@ export function updateSelection() {
 export function moveSelection(delta) {
   const rows = visibleRepoRows();
   if (!rows.length) return;
-  let idx = rows.findIndex((r) => r.dataset.path === store.selectedPath);
+  let idx = rows.findIndex((r) => rowId(r) === store.selectedRowId);
   idx = idx === -1 ? 0 : Math.max(0, Math.min(rows.length - 1, idx + delta));
-  store.selectedPath = rows[idx].dataset.path;
+  store.selectedRowId = rowId(rows[idx]);
   applySelection(rows);
   rows[idx].scrollIntoView({ block: "nearest" });
 }

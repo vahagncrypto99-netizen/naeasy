@@ -3,7 +3,7 @@
 
 import { $ } from "./dom.js";
 import { store } from "./store.js";
-import { render, moveSelection, hideIdePicker, hideFastStart } from "./tree.js";
+import { render, moveSelection, selectedProjectPath, hideIdePicker, hideFastStart } from "./tree.js";
 import { closeSettings } from "./settings.js";
 
 export function initKeyboard({ openProject }) {
@@ -30,7 +30,8 @@ export function initKeyboard({ openProject }) {
     }
     if (e.key === "Enter") {
       e.preventDefault();
-      if (store.selectedPath) openProject(store.selectedPath, null);
+      const path = selectedProjectPath();
+      if (path) openProject(path, null);
       return;
     }
 
