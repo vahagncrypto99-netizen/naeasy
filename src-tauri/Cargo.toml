@@ -1,6 +1,6 @@
 [package]
 name = "naeasy"
-version = "1.2.0"
+version = "1.3.0"
 description = "Minimal menu-bar navigator for your local Git projects"
 authors = ["Vahagn"]
 edition = "2021"
