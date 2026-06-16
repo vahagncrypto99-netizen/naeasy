@@ -3,6 +3,7 @@
 
 const { invoke } = window.__TAURI__.core;
 const { open: openDialog } = window.__TAURI__.dialog;
+const appApi = window.__TAURI__.app;
 const autostartPlugin = window.__TAURI__.autostart;
 const getCurrentWindow = window.__TAURI__.window?.getCurrentWindow;
 
@@ -33,6 +34,10 @@ export const removeBaseBranch = (name) => invoke("remove_base_branch", { name })
 export const setDefaultBaseBranch = (name) => invoke("set_default_base_branch", { name });
 export const setShortcut = (accel) => invoke("set_shortcut", { accel });
 export const quitApp = () => invoke("quit_app");
+
+/// App version for the About tab — empty string if the app API is unavailable.
+export const getVersion = () =>
+  appApi?.getVersion ? appApi.getVersion() : Promise.resolve("");
 
 export const pickDirectory = (options) =>
   openDialog({ directory: true, multiple: false, ...options });

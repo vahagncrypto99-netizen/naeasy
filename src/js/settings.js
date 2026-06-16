@@ -136,14 +136,41 @@ export function closeSettings() {
   document.body.classList.remove("settings-open");
 }
 
+// Tab bar: show one .tab-panel at a time, highlight its tab.
+function selectTab(name) {
+  document.querySelectorAll("#settings-tabs .tab").forEach((t) =>
+    t.classList.toggle("active", t.dataset.tab === name)
+  );
+  document.querySelectorAll(".tab-panel").forEach((p) => {
+    p.hidden = p.dataset.tab !== name;
+  });
+}
+
+let versionLoaded = false;
+
 function openSettings() {
   $("#settings").classList.remove("hidden");
   document.body.classList.add("settings-open");
+  selectTab("general"); // always reopen on the first tab
+  if (!versionLoaded) {
+    versionLoaded = true;
+    api
+      .getVersion()
+      .then((v) => {
+        if (v) $("#about-version").textContent = `v${v}`;
+      })
+      .catch(() => {});
+  }
 }
 
 export function initSettings({ refresh, applyState }) {
   $("#open-settings").addEventListener("click", openSettings);
   $("#settings-back").addEventListener("click", closeSettings);
+
+  $("#settings-tabs").addEventListener("click", (e) => {
+    const tab = e.target.closest(".tab");
+    if (tab) selectTab(tab.dataset.tab);
+  });
   $("#detect-ides").addEventListener("click", () => refresh(() => api.detectIdes()));
   $("#quit-app").addEventListener("click", () => api.quitApp());
 

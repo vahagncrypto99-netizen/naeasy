@@ -413,17 +413,6 @@ body.settings-open .app {
   padding: 14px;
   overflow-y: auto;
 }
-.section-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-}
-.section-label {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 600;
-}
 .ghost-btn {
   background: var(--fill);
   border: none;
@@ -449,11 +438,6 @@ body.settings-open .app {
   align-items: center;
   gap: 10px;
   margin-bottom: 12px;
-}
-.select-label {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 600;
 }
 .select {
   flex: 1;
@@ -521,18 +505,129 @@ body.settings-open .app {
   padding: 1px 5px;
   font-size: 10.5px;
 }
-.switch {
+/* Settings tab bar — a thin line icon over a short label; active tab fills.
+   Sits between panel-head and panel-body. */
+.tab-bar {
+  display: flex;
+  gap: 4px;
+  padding: 8px 10px 2px;
+}
+.tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 2px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.tab svg {
+  width: 19px;
+  height: 19px;
+}
+.tab:hover {
+  color: var(--text-dim);
+  background: var(--fill);
+}
+.tab.active {
+  color: var(--text);
+  background: var(--fill);
+}
+
+/* Settings cards — macOS System-Settings idiom: a bold group title above a
+   bordered, translucent container of rows divided by soft lines. */
+.settings-group {
+  margin-bottom: 18px;
+}
+.settings-group:last-child {
+  margin-bottom: 0;
+}
+.group-title {
+  display: block;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  margin: 0 2px 7px;
+}
+.card {
+  background: var(--fill);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.card-row {
   display: flex;
   align-items: center;
-  gap: 7px;
-  font-size: 12px;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  min-height: 38px;
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.card-row:last-child {
+  border-bottom: none;
+}
+label.card-row {
   cursor: pointer;
 }
-.switch input {
+.card-label {
+  color: var(--text);
+}
+.card-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.card-row input[type="checkbox"] {
   accent-color: var(--accent);
   cursor: pointer;
   width: 15px;
   height: 15px;
+  flex: none;
+  margin: 0;
+}
+.card-row .select {
+  min-width: 0;
+}
+/* A column row stacks a control block (branch chips + add-row) full width. */
+.card-row--column {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+.card-row--column .chips,
+.card-row--column .select-row {
+  margin-bottom: 0;
+}
+
+/* About: centered identity block (logo · name · version). */
+.card--about {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 18px 12px;
+}
+.about-logo {
+  font-size: 26px;
+  line-height: 1;
+}
+.about-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.about-version {
+  font-size: 11.5px;
+  color: var(--muted);
 }
 
 /* Popovers (IDE picker, fast-start) — frosted, like context menus */
@@ -604,15 +699,24 @@ body.settings-open .app {
   color: var(--accent);
 }
 
-/* Narrow numeric inputs in settings */
-.search.num {
-  flex: 0 0 56px;
-  width: 56px;
+/* Narrow numeric inputs in settings cards */
+.num {
+  flex: 0 0 46px;
+  width: 46px;
   text-align: center;
-  padding: 6px 4px;
+  background: var(--fill);
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  padding: 5px 4px;
+  font-size: 12px;
+  outline: none;
   -moz-appearance: textfield;
 }
-.search.num::-webkit-inner-spin-button {
+.num:focus {
+  background: var(--fill-hover);
+}
+.num::-webkit-inner-spin-button {
   -webkit-appearance: none;
 }
 

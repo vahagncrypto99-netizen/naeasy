@@ -38,110 +38,174 @@
     <div id="settings" class="panel hidden">
       <div class="panel-head">
         <button id="settings-back" class="icon-btn">‹</button>
-        <span class="panel-title">IDEs &amp; settings</span>
+        <span class="panel-title">Settings</span>
       </div>
+
+      <!-- Tab bar: icon + label per tab; JS toggles .active + the matching .tab-panel -->
+      <nav class="tab-bar" id="settings-tabs">
+        <button class="tab active" data-tab="general">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span>General</span>
+        </button>
+        <button class="tab" data-tab="editors">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+          <span>Editors</span>
+        </button>
+        <button class="tab" data-tab="window">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/></svg>
+          <span>Window</span>
+        </button>
+        <button class="tab" data-tab="about">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          <span>About</span>
+        </button>
+      </nav>
+
       <div class="panel-body">
-        <div class="section-row">
-          <span class="section-label">Editors / IDEs</span>
-          <div>
-            <button id="detect-ides" class="ghost-btn">Auto-detect</button>
-            <button id="add-ide" class="ghost-btn">Add IDE…</button>
+        <!-- ───────────────────────── General ───────────────────────── -->
+        <section class="tab-panel" data-tab="general">
+          <div class="settings-group">
+            <span class="group-title">Startup</span>
+            <div class="card">
+              <label class="card-row">
+                <span class="card-label">Launch at login</span>
+                <input type="checkbox" id="autostart-toggle" />
+              </label>
+            </div>
           </div>
-        </div>
 
-        <div class="select-row">
-          <span class="select-label">Default</span>
-          <select id="default-ide-select" class="select"></select>
-          <button id="remove-ide" class="icon-btn" title="Remove the selected IDE">✕</button>
-        </div>
+          <div class="settings-group">
+            <span class="group-title">Global shortcut</span>
+            <div class="card">
+              <div class="card-row">
+                <span class="card-label">Toggle window</span>
+                <button id="shortcut-btn" class="ghost-btn">Cmd+Shift+M</button>
+              </div>
+            </div>
+            <p class="hint">Click, then press your combo — a modifier + one key.</p>
+          </div>
 
-        <p class="hint">The default IDE is used on a single click. Click the badge on a project to pick a different one. ✕ removes the IDE selected above.</p>
+          <div class="settings-group">
+            <span class="group-title">Sections</span>
+            <div class="card">
+              <label class="card-row">
+                <span class="card-label">Recent</span>
+                <span class="card-control">
+                  <input id="max-recent" class="num" type="number" min="1" max="20" title="Max recent" />
+                  <input type="checkbox" id="recent-toggle" />
+                </span>
+              </label>
+              <label class="card-row">
+                <span class="card-label">Pinned</span>
+                <span class="card-control">
+                  <input id="max-pinned" class="num" type="number" min="1" max="20" title="Max pinned" />
+                  <input type="checkbox" id="pinned-toggle" />
+                </span>
+              </label>
+            </div>
+            <p class="hint">Pin projects with the ★ on a row. Numbers — how many each section shows.</p>
+          </div>
+        </section>
 
-        <div class="section-row" style="margin-top:16px">
-          <span class="section-label">Global shortcut</span>
-          <button id="shortcut-btn" class="ghost-btn">Cmd+Shift+M</button>
-        </div>
-        <p class="hint">Toggles the window from anywhere. Click, then press your combo (a modifier + one key).</p>
+        <!-- ───────────────────────── Editors ───────────────────────── -->
+        <section class="tab-panel" data-tab="editors" hidden>
+          <div class="settings-group">
+            <span class="group-title">Editors / IDEs</span>
+            <div class="card">
+              <div class="card-row">
+                <span class="card-label">Default</span>
+                <span class="card-control">
+                  <select id="default-ide-select" class="select"></select>
+                  <button id="remove-ide" class="icon-btn" title="Remove the selected IDE">✕</button>
+                </span>
+              </div>
+              <div class="card-row">
+                <span class="card-label">Detect</span>
+                <span class="card-control">
+                  <button id="detect-ides" class="ghost-btn">Auto-detect</button>
+                  <button id="add-ide" class="ghost-btn">Add IDE…</button>
+                </span>
+              </div>
+              <label class="card-row">
+                <span class="card-label">Open in tabs</span>
+                <input type="checkbox" id="tabs-toggle" />
+              </label>
+            </div>
+            <p class="hint">The default IDE opens on a single click; the badge on a project picks another. Tabs keep projects in one window (JetBrains; needs Accessibility).</p>
+          </div>
 
-        <div class="section-row" style="margin-top:16px">
-          <span class="section-label">Projects</span>
-          <label class="switch">
-            <input type="checkbox" id="tabs-toggle" />
-            <span>Open in tabs</span>
-          </label>
-        </div>
-        <p class="hint">Keeps projects as tabs of one IDE window (JetBrains IDEs; needs Accessibility). Off — a new window per project.</p>
+          <div class="settings-group">
+            <span class="group-title">Fast-start base branches</span>
+            <div class="card">
+              <div class="card-row card-row--column">
+                <div id="branch-chips" class="chips"></div>
+                <div class="select-row">
+                  <input id="new-base-branch" class="search" type="text" placeholder="Add base branch, e.g. develop" autocomplete="off" spellcheck="false" />
+                  <button id="add-base-branch" class="ghost-btn">Add</button>
+                </div>
+              </div>
+            </div>
+            <p class="hint">Click a branch to make it the default, ✕ removes it. The branch button on a project branches from the base (freshened from origin) and opens the IDE.</p>
+          </div>
+        </section>
 
-        <div class="section-row" style="margin-top:16px">
-          <span class="section-label">Fast-start base branches</span>
-        </div>
-        <div id="branch-chips" class="chips"></div>
-        <div class="select-row">
-          <input id="new-base-branch" class="search" type="text" placeholder="Add base branch, e.g. develop" autocomplete="off" spellcheck="false" />
-          <button id="add-base-branch" class="ghost-btn">Add</button>
-        </div>
-        <p class="hint">Click a branch to make it the default, ✕ removes it. The branch button on a project creates a branch from the base (freshened from origin) and opens the IDE; each project can remember its own base.</p>
+        <!-- ───────────────────────── Window ───────────────────────── -->
+        <section class="tab-panel" data-tab="window" hidden>
+          <div class="settings-group">
+            <span class="group-title">Layout</span>
+            <div class="card">
+              <label class="card-row">
+                <span class="card-label">Floating (movable)</span>
+                <input type="checkbox" id="float-toggle" />
+              </label>
+            </div>
+            <p class="hint">Floating: drag the window anywhere — the position is remembered. Off — pinned under the tray icon.</p>
+          </div>
 
-        <div class="section-row" style="margin-top:16px">
-          <span class="section-label">Window</span>
-          <label class="switch">
-            <input type="checkbox" id="float-toggle" />
-            <span>Floating (movable)</span>
-          </label>
-        </div>
-        <p class="hint">Floating: drag the window anywhere — the position is remembered. Off — always opens pinned under the tray icon.</p>
+          <div class="settings-group">
+            <span class="group-title">Size</span>
+            <div class="card">
+              <label class="card-row">
+                <span class="card-label">Fixed size</span>
+                <input type="checkbox" id="fixed-toggle" />
+              </label>
+              <div class="card-row" id="fixed-size-row">
+                <select id="size-preset" class="select">
+                  <option value="340x500">Compact · 340×500</option>
+                  <option value="380x560">Default · 380×560</option>
+                  <option value="440x680">Large · 440×680</option>
+                  <option value="520x780">Extra · 520×780</option>
+                </select>
+                <span class="card-control">
+                  <button id="size-minus" class="icon-btn" title="Smaller">−</button>
+                  <button id="size-plus" class="icon-btn" title="Bigger">+</button>
+                </span>
+              </div>
+            </div>
+            <p class="hint" id="size-hint">Off — resize like a normal window, the size is remembered.</p>
+          </div>
+        </section>
 
-        <div class="section-row">
-          <span class="section-label">Size</span>
-          <label class="switch">
-            <input type="checkbox" id="fixed-toggle" />
-            <span>Fixed size</span>
-          </label>
-        </div>
-        <div class="select-row" id="fixed-size-row">
-          <select id="size-preset" class="select">
-            <option value="340x500">Compact · 340×500</option>
-            <option value="380x560">Default · 380×560</option>
-            <option value="440x680">Large · 440×680</option>
-            <option value="520x780">Extra · 520×780</option>
-          </select>
-          <button id="size-minus" class="icon-btn" title="Smaller">−</button>
-          <button id="size-plus" class="icon-btn" title="Bigger">+</button>
-        </div>
-        <p class="hint" id="size-hint">Off — resize like a normal window, the size is remembered.</p>
+        <!-- ───────────────────────── About ───────────────────────── -->
+        <section class="tab-panel" data-tab="about" hidden>
+          <div class="settings-group">
+            <div class="card card--about">
+              <span class="about-logo">⌘</span>
+              <span class="about-name">naeasy</span>
+              <span class="about-version" id="about-version">—</span>
+            </div>
+          </div>
 
-        <div class="section-row" style="margin-top:16px">
-          <span class="section-label">Sections</span>
-        </div>
-        <div class="select-row">
-          <label class="switch" style="flex:1">
-            <input type="checkbox" id="recent-toggle" />
-            <span>Recent</span>
-          </label>
-          <input id="max-recent" class="search num" type="number" min="1" max="20" title="Max recent" />
-        </div>
-        <div class="select-row">
-          <label class="switch" style="flex:1">
-            <input type="checkbox" id="pinned-toggle" />
-            <span>Pinned</span>
-          </label>
-          <input id="max-pinned" class="search num" type="number" min="1" max="20" title="Max pinned" />
-        </div>
-        <p class="hint">Pin projects with the ★ on a project row. Numbers — how many entries each section shows.</p>
-
-        <div class="section-row" style="margin-top:16px">
-          <span class="section-label">Startup</span>
-          <label class="switch">
-            <input type="checkbox" id="autostart-toggle" />
-            <span>Launch at login</span>
-          </label>
-        </div>
-
-        <div class="section-row" style="margin-top:16px">
-          <span class="section-label">App</span>
-          <button id="quit-app" class="ghost-btn">Quit naeasy</button>
-        </div>
-        <p class="hint">To uninstall: quit the app here (or via the menu-bar icon), then drag naeasy from Applications to the Trash — or run <code>./uninstall.sh</code>.</p>
+          <div class="settings-group">
+            <div class="card">
+              <div class="card-row">
+                <span class="card-label">Quit the app</span>
+                <button id="quit-app" class="ghost-btn">Quit naeasy</button>
+              </div>
+            </div>
+            <p class="hint">To uninstall: quit here (or via the menu-bar icon), then drag naeasy from Applications to the Trash — or run <code>./uninstall.sh</code>.</p>
+          </div>
+        </section>
       </div>
     </div>
 
