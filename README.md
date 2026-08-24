@@ -96,6 +96,21 @@ sudo apt-get remove -y naeasy
 
 > 💡 `wmctrl` (window focusing / "open now" detection, X11) installs automatically as a package dependency.
 
+**Placing the popover under the tray icon.** The Linux tray protocol
+(StatusNotifierItem) never tells an app where its own icon ended up, so by
+default the popover pins itself to the top-right corner. To have it open
+centered under the icon instead, record the icon's position once:
+
+```bash
+sudo apt-get install -y python3-pyatspi
+./scripts/detect-tray-anchor.py --set icon    # naeasy's indicator is named 'icon'
+```
+
+That writes `tray_anchor_x` to `~/.config/com.vahagn.naeasy/config.json`.
+Re-run it after adding or removing other indicators — they shift each other
+along the top bar. Prefer to place the window yourself? Turn on the floating
+window in **Settings -> Window** and drag it where you want.
+
 <details>
 <summary>Installing from a clone (no curl-pipe)</summary>
 

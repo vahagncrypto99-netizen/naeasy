@@ -417,6 +417,11 @@ impl WorkspaceService {
         (config.window_float, config.window_pos, config.window_fixed, size)
     }
 
+    /// Horizontal center of the tray icon, when the user has recorded one.
+    pub fn tray_anchor_x(&self) -> Option<i32> {
+        self.config.lock().unwrap().tray_anchor_x
+    }
+
     /// Persist a new shortcut accelerator (registration with the OS is the
     /// UI layer's job — it owns the Tauri app handle).
     pub fn set_shortcut(&self, accel: String) -> Result<AppData, String> {

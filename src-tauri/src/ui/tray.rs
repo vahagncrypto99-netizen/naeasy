@@ -78,7 +78,7 @@ pub fn apply_window_geometry(app: &tauri::AppHandle) {
 /// float mode restores the remembered position (or stays where it is).
 fn position_main_under_tray(app: &tauri::AppHandle) {
     let state = app.state::<crate::app::state::AppState>();
-    let (float, pos, _, _) = state.service.window_prefs();
+    let (float, pos, _, (win_w, _)) = state.service.window_prefs();
     if float {
         if let (Some((x, y)), Some(window)) = (pos, app.get_webview_window("main")) {
             use tauri::{PhysicalPosition, Position};
@@ -86,14 +86,14 @@ fn position_main_under_tray(app: &tauri::AppHandle) {
         }
         return;
     }
-    if let (Some(tray), Some(window)) = (
-        app.tray_by_id("main-tray"),
-        app.get_webview_window("main"),
-    ) {
-        if let Ok(Some(rect)) = tray.rect() {
-            position_under_tray(&window, &rect);
-        }
-    }
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    // No tray rect on GTK/SNI trays — the popover pins to the corner there.
+    let rect = app
+        .tray_by_id("main-tray")
+        .and_then(|tray| tray.rect().ok().flatten());
+    position_popover(&window, rect.as_ref(), win_w);
 }
 
 /// Hide the main window (panel-aware). The single hide path for every
@@ -235,54 +235,84 @@ pub fn setup(app: &tauri::App) -> tauri::Result<()> {
     Ok(())
 }
 
-/// Position the popover window horizontally centered under the tray icon,
-/// clamped to the monitor so it can never end up off-screen.
-fn position_under_tray(window: &tauri::WebviewWindow, rect: &tauri::Rect) {
+/// Place the popover for showing: under the tray icon when the platform
+/// reports its geometry, pinned to the top-right corner when it does not.
+/// The arithmetic lives in `domain::popover` (unit-tested); this only turns
+/// Tauri types into it and back.
+///
+/// `width` is the configured window width in logical pixels. It comes from
+/// the config rather than `outer_size()` on purpose: positioning runs right
+/// after the startup resize, and GTK still reports the pre-resize size there
+/// — placing the popover hundreds of pixels off the corner.
+fn position_popover(window: &tauri::WebviewWindow, rect: Option<&tauri::Rect>, width: u32) {
+    use crate::domain::popover::{popover_position, MonitorBounds, TrayAnchor};
     use tauri::{PhysicalPosition, Position};
 
-    let win_w = match window.outer_size() {
-        Ok(s) => s.width as f64,
-        Err(_) => return,
-    };
     let sf = window.scale_factor().unwrap_or(1.0);
+    let win_w = (width as f64 * sf).round() as u32;
 
-    // Tray rect — convert to physical pixels.
-    let tray_x = match rect.position {
-        Position::Physical(p) => p.x as f64,
-        Position::Logical(p) => p.x * sf,
-    };
-    let tray_w = match rect.size {
-        tauri::Size::Physical(s) => s.width as f64,
-        tauri::Size::Logical(s) => s.width * sf,
+    // Monitor bounds unknown -> centering is the only safe placement.
+    let Ok(Some(monitor)) = window.primary_monitor() else {
+        let _ = window.center();
+        return;
     };
 
-    // Monitor bounds (physical). Fall back to centering if unknown.
-    let (mon_x, mon_y, mon_w) = match window.primary_monitor() {
-        Ok(Some(m)) => {
-            let p = m.position();
-            let s = m.size();
-            (p.x as f64, p.y as f64, s.width as f64)
+    // Tray rect -> physical pixels. `None` on GTK/SNI, where the tray
+    // protocol carries no geometry at all (tray-icon returns a hard None).
+    #[allow(unused_mut)]
+    let mut anchor = rect.map(|r| TrayAnchor {
+        x: match r.position {
+            Position::Physical(p) => p.x as f64,
+            Position::Logical(p) => p.x * sf,
+        },
+        width: match r.size {
+            tauri::Size::Physical(s) => s.width as f64,
+            tauri::Size::Logical(s) => s.width * sf,
+        },
+    });
+
+    // No rect (GTK/SNI): use the icon position recorded in the config.
+    if anchor.is_none() {
+        if let Some(x) = window
+            .app_handle()
+            .state::<crate::app::state::AppState>()
+            .service
+            .tray_anchor_x()
+        {
+            // Width 0: the recorded x IS the icon's center, so the window
+            // centers on it exactly as it does under a reported tray rect.
+            anchor = Some(TrayAnchor {
+                x: x as f64,
+                width: 0.0,
+            });
         }
-        _ => {
-            let _ = window.center();
-            return;
-        }
+    }
+
+    // macOS: just below the menu bar (~24pt), as before. Elsewhere: below
+    // whatever the desktop reserves at the top — the work area already
+    // excludes GNOME's top bar, so no magic constant is needed.
+    #[cfg(target_os = "macos")]
+    let (bounds, top_margin) = (
+        MonitorBounds {
+            x: monitor.position().x,
+            y: monitor.position().y,
+            width: monitor.size().width,
+        },
+        26.0 * sf,
+    );
+    #[cfg(not(target_os = "macos"))]
+    let (bounds, top_margin) = {
+        let work = monitor.work_area();
+        (
+            MonitorBounds {
+                x: work.position.x,
+                y: work.position.y,
+                width: work.size.width,
+            },
+            8.0,
+        )
     };
 
-    let mut x = tray_x + tray_w / 2.0 - win_w / 2.0;
-    let min_x = mon_x + 8.0;
-    let max_x = mon_x + mon_w - win_w - 8.0;
-    if x < min_x {
-        x = min_x;
-    }
-    if max_x > min_x && x > max_x {
-        x = max_x;
-    }
-    // Just below the menu bar (~24pt).
-    let y = mon_y + (26.0 * sf);
-
-    let _ = window.set_position(Position::Physical(PhysicalPosition {
-        x: x as i32,
-        y: y as i32,
-    }));
+    let (x, y) = popover_position(&bounds, win_w, anchor, top_margin);
+    let _ = window.set_position(Position::Physical(PhysicalPosition { x, y }));
 }

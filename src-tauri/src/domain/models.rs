@@ -53,6 +53,12 @@ pub struct Config {
     /// Remembered window position (physical px), float mode only.
     #[serde(default)]
     pub window_pos: Option<(i32, i32)>,
+    /// Horizontal center of the tray icon (physical px), pinned mode. Only
+    /// consulted where the tray reports no geometry of its own — GTK/SNI
+    /// trays never do, so there the popover would otherwise sit in the
+    /// corner instead of under the icon.
+    #[serde(default)]
+    pub tray_anchor_x: Option<i32>,
     /// Fixed-size window: not resizable, size taken from `fixed_size`.
     #[serde(default)]
     pub window_fixed: bool,
@@ -112,6 +118,7 @@ impl Default for Config {
             project_base_branches: Default::default(),
             window_float: false,
             window_pos: None,
+            tray_anchor_x: None,
             window_fixed: false,
             window_size: None,
             fixed_size: default_fixed_size(),

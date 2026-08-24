@@ -2,4 +2,5 @@
 
 pub mod git_url;
 pub mod models;
+pub mod popover;
 pub mod tree;
