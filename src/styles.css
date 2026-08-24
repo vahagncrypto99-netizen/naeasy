@@ -55,6 +55,40 @@ body.mac {
   }
 }
 
+/* Non-mac: the system draws neither the vibrancy material nor a window
+   shadow for an undecorated window, so the popover supplies its own depth.
+   A transparent gutter gives the shadow somewhere to fall; the hairline and
+   the top highlight are what make a dark slab read as a raised panel. */
+body:not(.mac) {
+  padding: 10px;
+  /* The shadow has to finish inside that 10px gutter: the window is a
+     rectangle, so anything wider gets sliced off square at its edge and
+     reads as a dark box around the popover instead of a shadow. Widest
+     extent here is 1px ring + 3px offset + half of the 8px blur = 8px. */
+  --drop:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 0 0 1px rgba(0, 0, 0, 0.55),
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 3px 8px rgba(0, 0, 0, 0.5);
+}
+body:not(.mac) .app {
+  height: 100%;
+  box-shadow: var(--drop);
+}
+body:not(.mac) .panel {
+  inset: 10px;
+  box-shadow: var(--drop);
+}
+@media (prefers-color-scheme: light) {
+  body:not(.mac) {
+    --drop:
+      inset 0 1px 0 rgba(255, 255, 255, 0.9),
+      0 0 0 1px rgba(0, 0, 0, 0.16),
+      0 1px 2px rgba(0, 0, 0, 0.12),
+      0 3px 8px rgba(0, 0, 0, 0.18);
+  }
+}
+
 * {
   box-sizing: border-box;
 }
@@ -193,6 +227,53 @@ body {
 .content::-webkit-scrollbar-thumb {
   background: var(--line);
   border-radius: 4px;
+}
+
+/* A row sliced by the window edge reads as broken; a shadow over it reads as
+   "keep scrolling". Pure CSS: the `local` layers scroll with the content and
+   uncover the pinned `scroll` layers only while more list remains. */
+body:not(.mac) .content {
+  background:
+    linear-gradient(var(--bg) 30%, rgba(0, 0, 0, 0)) top / 100% 22px no-repeat
+      local,
+    linear-gradient(rgba(0, 0, 0, 0), var(--bg) 70%) bottom / 100% 22px
+      no-repeat local,
+    radial-gradient(farthest-side at 50% 0, rgba(0, 0, 0, 0.34), rgba(0, 0, 0, 0))
+      top / 100% 10px no-repeat scroll,
+    radial-gradient(
+        farthest-side at 50% 100%,
+        rgba(0, 0, 0, 0.34),
+        rgba(0, 0, 0, 0)
+      )
+      bottom / 100% 10px no-repeat scroll;
+}
+/* WebKitGTK paints a permanent chunky scrollbar where macOS uses an overlay
+   one. Inset it behind a transparent border so it floats instead. */
+body:not(.mac) .content::-webkit-scrollbar {
+  width: 11px;
+}
+body:not(.mac) .content::-webkit-scrollbar-track {
+  background: transparent;
+}
+body:not(.mac) .content::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+  border-radius: 7px;
+}
+body:not(.mac) .content:hover::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.28);
+  background-clip: padding-box;
+}
+@media (prefers-color-scheme: light) {
+  body:not(.mac) .content::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.18);
+    background-clip: padding-box;
+  }
+  body:not(.mac) .content:hover::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.3);
+    background-clip: padding-box;
+  }
 }
 
 .ws {
