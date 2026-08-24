@@ -373,6 +373,26 @@ fn scan_open_macos(names: &[String]) -> HashMap<String, String> {
 
 // ------------------------- Linux (and other unix) -------------------------
 
+/// The flag that makes an IDE open a project in its existing window instead
+/// of spawning another one, if it has such a flag.
+///
+/// macOS gets real window tabs from AppKit; Linux has no equivalent, so tab
+/// mode means "stop opening a new window every time". Only VS Code and its
+/// forks expose that on the command line — JetBrains decides it in its own
+/// settings ("Open project in"), and Zed/Sublime have nothing comparable.
+#[cfg(all(unix, not(target_os = "macos")))]
+fn reuse_window_flag(app_path: &str) -> Option<&'static str> {
+    const VSCODE_FAMILY: &[&str] = &["code", "code-insiders", "codium", "cursor", "windsurf"];
+
+    let stem = std::path::Path::new(app_path)
+        .file_stem()?
+        .to_string_lossy()
+        .to_lowercase();
+    VSCODE_FAMILY
+        .contains(&stem.as_str())
+        .then_some("--reuse-window")
+}
+
 #[cfg(all(unix, not(target_os = "macos")))]
 pub struct LinuxLauncher;
 
@@ -381,13 +401,19 @@ impl ProjectLauncher for LinuxLauncher {
     fn open(&self, app_path: &str, project_path: &str, in_tabs: bool) -> Result<(), String> {
         use std::process::Command;
 
-        // Tab mode is macOS-only (native window tabs); ignored here.
-        let _ = in_tabs;
         // Try to focus an already-open window (via wmctrl) before launching.
         if focus_existing_window(app_path, project_path) {
             return Ok(());
         }
-        Command::new(app_path)
+        let mut command = Command::new(app_path);
+        // No native window tabs here — tab mode reuses the IDE's window for
+        // the IDEs that can, so opening projects stops piling up windows.
+        if in_tabs {
+            if let Some(flag) = reuse_window_flag(app_path) {
+                command.arg(flag);
+            }
+        }
+        command
             .arg(project_path)
             .spawn()
             .map(|_| ())
@@ -553,5 +579,18 @@ mod tests {
             "Code"
         );
         assert_eq!(process_name_for("/Applications/PhpStorm.app"), "PhpStorm");
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    #[test]
+    fn reuses_the_window_only_where_the_ide_supports_it() {
+        use super::reuse_window_flag;
+
+        assert_eq!(reuse_window_flag("/usr/bin/cursor"), Some("--reuse-window"));
+        assert_eq!(reuse_window_flag("/usr/bin/code"), Some("--reuse-window"));
+        assert_eq!(reuse_window_flag("/usr/bin/codium"), Some("--reuse-window"));
+        // JetBrains keeps this in its own settings, Zed has no such flag.
+        assert_eq!(reuse_window_flag("/snap/bin/phpstorm"), None);
+        assert_eq!(reuse_window_flag("/usr/bin/zed"), None);
     }
 }
