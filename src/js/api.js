@@ -39,8 +39,19 @@ export const quitApp = () => invoke("quit_app");
 export const getVersion = () =>
   appApi?.getVersion ? appApi.getVersion() : Promise.resolve("");
 
-export const pickDirectory = (options) =>
-  openDialog({ directory: true, multiple: false, ...options });
+/// Bracketed with the auto-hide latch: the native picker takes the focus,
+/// and without this the popover would hide behind it mid-pick on platforms
+/// that auto-hide on focus loss.
+export async function pickDirectory(options) {
+  const suppress = (suppressed) =>
+    invoke("set_autohide_suppressed", { suppressed }).catch(() => {});
+  await suppress(true);
+  try {
+    return await openDialog({ directory: true, multiple: false, ...options });
+  } finally {
+    suppress(false);
+  }
+}
 
 /// Hide the main window (Spotlight-like: opening a project tucks naeasy
 /// away). Goes through the backend's single hide path so transient UI is

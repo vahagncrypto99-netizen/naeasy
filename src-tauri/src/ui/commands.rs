@@ -186,6 +186,16 @@ pub fn hide_window(app: tauri::AppHandle) {
     super::tray::hide_main(&app);
 }
 
+/// Hold off focus-loss auto-hide while the frontend has a native dialog
+/// open (folder picker) — that dialog takes the focus, and without this the
+/// popover would hide behind it mid-pick.
+#[tauri::command]
+pub fn set_autohide_suppressed(state: State<AppState>, suppressed: bool) {
+    state
+        .autohide_suppressed
+        .store(suppressed, std::sync::atomic::Ordering::Relaxed);
+}
+
 /// Quit the whole app (called from the UI "Quit" button).
 #[tauri::command]
 pub fn quit_app(app: tauri::AppHandle) {

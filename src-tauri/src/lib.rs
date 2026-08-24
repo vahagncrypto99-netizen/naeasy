@@ -22,6 +22,17 @@ pub fn run() {
     // the Spotlight/Raycast approach.
     #[cfg(target_os = "macos")]
     let builder = builder.plugin(tauri_nspanel::init());
+    // A second launch (app menu, terminal) must not raise a rival process —
+    // it loses the race for the global hotkey and just sits there. Surface
+    // the running instance instead. macOS re-uses the running bundle itself.
+    #[cfg(not(target_os = "macos"))]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+        // Fired from the plugin's D-Bus listener thread. GTK and Xlib may
+        // only be touched from the main thread — calling straight into the
+        // window here aborts the process ("xcb_xlib_threads_sequence_lost").
+        let handle = app.clone();
+        let _ = app.run_on_main_thread(move || ui::tray::show_main(&handle));
+    }));
 
     builder
         .plugin(
@@ -47,6 +58,18 @@ pub fn run() {
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _shortcut, event| {
                     if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        // The hotkey listener runs on its own thread. GTK and
+                        // Xlib may only be touched from the main one — driving
+                        // the window straight from here aborts the process
+                        // mid-toggle, and only sometimes, being a race.
+                        #[cfg(not(target_os = "macos"))]
+                        {
+                            let handle = app.clone();
+                            let _ = app.run_on_main_thread(move || {
+                                ui::tray::toggle_main(&handle);
+                            });
+                        }
+                        #[cfg(target_os = "macos")]
                         ui::tray::toggle_main(app);
                     }
                 })
@@ -77,6 +100,7 @@ pub fn run() {
             app.manage(AppState {
                 service,
                 layout_provider: infra::keyboard_layouts::platform_layout_provider(),
+                autohide_suppressed: std::sync::atomic::AtomicBool::new(false),
             });
 
             // Register the global hotkey that toggles the window.
@@ -200,6 +224,7 @@ pub fn run() {
             ui::commands::remove_base_branch,
             ui::commands::set_default_base_branch,
             ui::commands::hide_window,
+            ui::commands::set_autohide_suppressed,
             ui::commands::open_last_mr,
             ui::commands::toggle_pin,
             ui::commands::set_section_prefs,
@@ -216,6 +241,31 @@ pub fn run() {
                 tauri::WindowEvent::CloseRequested { api, .. } => {
                     api.prevent_close();
                     ui::tray::hide_main(window.app_handle());
+                }
+                // Spotlight behavior where there is no NSPanel delegate to
+                // do it: hide once the focus leaves the popover. Debounced,
+                // because Linux WMs drop focus for a moment while raising a
+                // window — and skipped while a native dialog owns the focus.
+                #[cfg(not(target_os = "macos"))]
+                tauri::WindowEvent::Focused(false) => {
+                    let app = window.app_handle().clone();
+                    std::thread::spawn(move || {
+                        std::thread::sleep(std::time::Duration::from_millis(150));
+                        let handle = app.clone();
+                        let _ = app.run_on_main_thread(move || {
+                            let suppressed = handle
+                                .state::<AppState>()
+                                .autohide_suppressed
+                                .load(std::sync::atomic::Ordering::Relaxed);
+                            let refocused = handle
+                                .get_webview_window("main")
+                                .and_then(|w| w.is_focused().ok())
+                                .unwrap_or(false);
+                            if !suppressed && !refocused {
+                                ui::tray::hide_main(&handle);
+                            }
+                        });
+                    });
                 }
                 // Remember geometry in memory (persisted on hide). The
                 // service itself ignores these in pinned/fixed modes.
