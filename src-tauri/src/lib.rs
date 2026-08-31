@@ -110,8 +110,8 @@ pub fn run() {
 
             // Re-emit keyboard-layout maps to the frontend whenever the user
             // adds/removes/changes a layout. Registered on the main thread so
-            // the notification callback runs there too.
-            #[cfg(target_os = "macos")]
+            // the notification callback runs there too — and, on X11, so the
+            // first read of the keymap happens there as well.
             infra::keyboard_layouts::watch_layout_changes(app.handle().clone());
 
             // Build the tray icon (menu-bar entry).

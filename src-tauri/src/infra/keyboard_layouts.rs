@@ -3,11 +3,11 @@
 //! frontend tries these maps in both directions so a Latin project name typed
 //! on a non-Latin layout (or vice-versa) still matches.
 //!
-//! On macOS the maps are derived from the OS via Text Input Sources
-//! (`TISCreateInputSourceList` + `UCKeyTranslate`) — not hardcoded — so every
-//! script the user actually has installed (Russian, Armenian, …) is covered
-//! exactly. Other platforms get an empty list and search degrades to raw +
-//! fuzzy with no behavior change.
+//! The maps are derived from the OS, never hardcoded, so every script the user
+//! actually has installed (Russian, Armenian, …) is covered exactly: macOS
+//! reads Text Input Sources (`TISCreateInputSourceList` + `UCKeyTranslate`),
+//! X11 reads the keymap through GDK. Anywhere else the list is empty and
+//! search degrades to raw + fuzzy with no behavior change.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -35,23 +35,15 @@ pub fn platform_layout_provider() -> Arc<dyn KeyboardLayoutProvider> {
     }
     #[cfg(not(target_os = "macos"))]
     {
-        Arc::new(NoopLayoutProvider)
-    }
-}
-
-/// Fallback for platforms without a layout provider: no maps.
-#[cfg(not(target_os = "macos"))]
-struct NoopLayoutProvider;
-
-#[cfg(not(target_os = "macos"))]
-impl KeyboardLayoutProvider for NoopLayoutProvider {
-    fn layouts(&self) -> Vec<LayoutMap> {
-        Vec::new()
+        Arc::new(linux::X11LayoutProvider)
     }
 }
 
 #[cfg(target_os = "macos")]
 pub use macos::watch_layout_changes;
+
+#[cfg(not(target_os = "macos"))]
+pub use linux::watch_layout_changes;
 
 #[cfg(target_os = "macos")]
 mod macos {
@@ -288,6 +280,159 @@ mod macos {
             let sim = |kc: u16| if kc == 0x05 { Some('П') } else { None };
             let m = build_map(sim);
             assert_eq!(m.get(&'п'), Some(&'g'));
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+mod linux {
+    use super::{KeyboardLayoutProvider, LayoutMap};
+    use std::collections::BTreeMap;
+    use std::sync::RwLock;
+    use tauri::{AppHandle, Emitter};
+
+    // Physical key → US-QWERTY Latin letter on that same key. X11 hardware
+    // keycodes are the evdev codes plus 8 and never move, whatever layout is
+    // active — the exact counterpart of the macOS virtual key codes above.
+    const LETTER_KEYS: &[(u32, char)] = &[
+        (38, 'a'), (56, 'b'), (54, 'c'), (40, 'd'), (26, 'e'), (41, 'f'),
+        (42, 'g'), (43, 'h'), (31, 'i'), (44, 'j'), (45, 'k'), (46, 'l'),
+        (58, 'm'), (57, 'n'), (32, 'o'), (33, 'p'), (24, 'q'), (27, 'r'),
+        (39, 's'), (28, 't'), (30, 'u'), (55, 'v'), (25, 'w'), (53, 'x'),
+        (29, 'y'), (52, 'z'),
+    ];
+
+    /// The maps last read from the X keymap. GDK may only be touched from the
+    /// main thread while `layouts()` answers a command on a worker thread, so
+    /// the maps are built on the main thread — at startup and whenever the
+    /// keymap changes — and merely served from here.
+    static CACHE: RwLock<Vec<LayoutMap>> = RwLock::new(Vec::new());
+
+    pub struct X11LayoutProvider;
+
+    impl KeyboardLayoutProvider for X11LayoutProvider {
+        fn layouts(&self) -> Vec<LayoutMap> {
+            CACHE.read().map(|maps| maps.clone()).unwrap_or_default()
+        }
+    }
+
+    /// Build the `layout_char → latin_char` map for one layout group, given a
+    /// translator for that group's keys. Pure (no GDK) so it is unit-testable;
+    /// identity entries (Latin layouts) are dropped.
+    fn build_map(translate: impl Fn(u32) -> Option<char>) -> BTreeMap<char, char> {
+        let mut map = BTreeMap::new();
+        for &(keycode, latin) in LETTER_KEYS {
+            if let Some(ch) = translate(keycode) {
+                let lc = ch.to_lowercase().next().unwrap_or(ch);
+                if lc != latin {
+                    map.insert(lc, latin);
+                }
+            }
+        }
+        map
+    }
+
+    /// Read every layout group out of the X keymap and build one map each.
+    /// MAIN THREAD ONLY — GDK is not thread-safe.
+    pub fn current_layouts() -> Vec<LayoutMap> {
+        use gtk::gdk;
+
+        let Some(keymap) = gdk::Display::default().and_then(|d| gdk::Keymap::for_display(&d)) else {
+            return Vec::new();
+        };
+
+        // One `entries_for_keycode` call reports every (group, level) the key
+        // carries, so the number of installed groups falls out of the data —
+        // GDK exposes no count of its own. Level 0 is the unshifted character.
+        let mut chars: BTreeMap<(i32, u32), char> = BTreeMap::new();
+        let mut groups = 0;
+        for &(keycode, _) in LETTER_KEYS {
+            for (key, keyval) in keymap.entries_for_keycode(keycode) {
+                groups = groups.max(key.group() + 1);
+                if key.level() != 0 {
+                    continue;
+                }
+                if let Some(ch) = gdk::keys::Key::from(keyval).to_unicode() {
+                    chars.insert((key.group(), keycode), ch);
+                }
+            }
+        }
+
+        (0..groups)
+            .filter_map(|group| {
+                let map = build_map(|keycode| chars.get(&(group, keycode)).copied());
+                (!map.is_empty()).then(|| LayoutMap {
+                    id: format!("group{group}"),
+                    map,
+                })
+            })
+            .collect()
+    }
+
+    /// Seed the cache and keep it fresh: GDK raises `keys-changed` whenever the
+    /// X keymap is rebuilt (a layout added, removed or reordered). Registered
+    /// on the main thread, so the callback runs there too.
+    pub fn watch_layout_changes(app: AppHandle) {
+        use gtk::gdk;
+
+        refresh(&app);
+        let Some(keymap) = gdk::Display::default().and_then(|d| gdk::Keymap::for_display(&d)) else {
+            return;
+        };
+        keymap.connect_keys_changed(move |_| refresh(&app));
+    }
+
+    /// Re-read the keymap into the cache and push the fresh maps to the
+    /// frontend. MAIN THREAD ONLY (see `current_layouts`).
+    fn refresh(app: &AppHandle) {
+        let maps = current_layouts();
+        if let Ok(mut cache) = CACHE.write() {
+            *cache = maps.clone();
+        }
+        let _ = app.emit("layouts-changed", maps);
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn build_map_composes_a_cyrillic_layout() {
+            // Physical c/o/n/n on a Russian layout yield ц/о/н/н, so a query
+            // typed there converts straight back to "conn".
+            let sim = |kc: u32| match kc {
+                54 => Some('ц'),
+                32 => Some('о'),
+                57 => Some('н'),
+                33 => Some('п'),
+                38 => Some('а'),
+                29 => Some('ы'),
+                _ => None,
+            };
+            let m = build_map(sim);
+            assert_eq!(m.get(&'ц'), Some(&'c'));
+            assert_eq!(m.get(&'о'), Some(&'o'));
+            assert_eq!(m.get(&'н'), Some(&'n'));
+            assert_eq!(m.get(&'ы'), Some(&'y'));
+        }
+
+        #[test]
+        fn build_map_drops_identity_latin_layout() {
+            // A US layout: every key yields its own Latin letter → all identity.
+            let sim = |kc: u32| LETTER_KEYS.iter().find(|(k, _)| *k == kc).map(|(_, c)| *c);
+            assert!(build_map(sim).is_empty());
+        }
+
+        #[test]
+        fn build_map_lowercases_uppercase_keysyms() {
+            let sim = |kc: u32| if kc == 54 { Some('Ц') } else { None };
+            assert_eq!(build_map(sim).get(&'ц'), Some(&'c'));
+        }
+
+        #[test]
+        fn build_map_skips_keys_the_layout_does_not_produce() {
+            let sim = |kc: u32| if kc == 54 { Some('ц') } else { None };
+            assert_eq!(build_map(sim).len(), 1);
         }
     }
 }
