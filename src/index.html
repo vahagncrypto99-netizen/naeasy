@@ -8,36 +8,38 @@
   </head>
   <body>
     <div class="app">
-      <!-- drag-region attrs are managed by JS: only the floating mode drags -->
-      <header class="header">
-        <div class="header-left">
-          <span class="logo">⌘</span>
-          <span class="title">naeasy</span>
+      <!-- The one row at the top IS the search field: the caret is here on
+           every show, so typing filters straight away. Also the window's grab
+           handle — drag-region attrs are managed by JS (floating mode only). -->
+      <div class="searchbar">
+        <span class="search-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg></span>
+        <input id="search" class="search" type="text" placeholder="Search projects…" autocomplete="off" spellcheck="false" autofocus />
+        <div class="bar-actions">
+          <button id="add-workspace" class="icon-btn" title="Add workspace"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+          <button id="rescan" class="icon-btn" title="Rescan all workspaces"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-.6 4"/><polyline points="20 4 20 11 13 11"/></svg></button>
+          <button id="open-settings" class="icon-btn" title="IDEs &amp; settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
         </div>
-        <div class="header-actions">
-          <button id="rescan" class="icon-btn" title="Rescan all workspaces">⟳</button>
-          <button id="open-settings" class="icon-btn" title="IDEs &amp; settings">⚙</button>
-        </div>
-      </header>
-
-      <div class="toolbar">
-        <input id="search" class="search" type="text" placeholder="Filter projects…" autocomplete="off" />
-        <button id="add-workspace" class="add-btn" title="Add workspace">＋</button>
       </div>
 
       <main id="content" class="content">
         <!-- tree renders here -->
       </main>
 
+      <!-- Always-on key hints; a status message takes the row over while it's up. -->
       <footer class="footer" id="footer">
-        <span id="status" class="muted"></span>
+        <span id="status" class="status"></span>
+        <span class="hints">
+          <span class="khint"><kbd>↑</kbd><kbd>↓</kbd>move</span>
+          <span class="khint"><kbd>↵</kbd>open</span>
+          <span class="khint"><kbd>esc</kbd>hide</span>
+        </span>
       </footer>
     </div>
 
     <!-- Settings / IDE panel -->
     <div id="settings" class="panel hidden">
       <div class="panel-head">
-        <button id="settings-back" class="icon-btn">‹</button>
+        <button id="settings-back" class="icon-btn" title="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 5 8 12 15 19"/></svg></button>
         <span class="panel-title">Settings</span>
       </div>
 
@@ -116,7 +118,7 @@
                 <span class="card-label">Default</span>
                 <span class="card-control">
                   <select id="default-ide-select" class="select"></select>
-                  <button id="remove-ide" class="icon-btn" title="Remove the selected IDE">✕</button>
+                  <button id="remove-ide" class="icon-btn" title="Remove the selected IDE"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
                 </span>
               </div>
               <div class="card-row">

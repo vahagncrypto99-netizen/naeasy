@@ -1,50 +1,58 @@
+/* naeasy — a launcher popover. The visual model is Spotlight/Raycast: one
+   search row at the top, a list under it, a key-hint bar at the bottom, and
+   no chrome competing with any of them. Colors live in tokens so the whole
+   surface follows the OS light/dark appearance from one place. */
+
 :root {
-  /* System-widget palette (matches native macOS menus/widgets). */
-  --bg: #232325;
-  --bg-panel: #232325;
-  --fill: rgba(255, 255, 255, 0.07);
-  --fill-hover: rgba(255, 255, 255, 0.11);
-  --fill-press: rgba(255, 255, 255, 0.16);
-  --line: rgba(255, 255, 255, 0.12);
-  --line-soft: rgba(255, 255, 255, 0.07);
-  --text: rgba(255, 255, 255, 0.96);
-  --text-dim: rgba(235, 235, 245, 0.72);
-  --muted: rgba(235, 235, 245, 0.55);
-  --accent: #0a84ff;
+  /* Dark: a deep neutral slab. Surfaces get lighter as they come forward —
+     that ladder, not shadows, is what carries depth inside the window. */
+  --bg: #1b1c1f;
+  --bg-panel: #1b1c1f;
+  --fill: rgba(255, 255, 255, 0.06);
+  --fill-hover: rgba(255, 255, 255, 0.1);
+  --fill-press: rgba(255, 255, 255, 0.15);
+  --line: rgba(255, 255, 255, 0.11);
+  --line-soft: rgba(255, 255, 255, 0.06);
+  --text: rgba(255, 255, 255, 0.94);
+  --text-dim: rgba(235, 235, 245, 0.7);
+  --muted: rgba(235, 235, 245, 0.45);
+  --accent: #3b9dff;
+  --accent-soft: rgba(59, 157, 255, 0.16);
   --on-accent: #ffffff;
-  --green: #30d158;
-  --popover: #2b2b2d;
+  --green: #32d74b;
+  --popover: #2a2b2f;
+  --radius-win: 14px;
   --radius: 10px;
-  --radius-sm: 7px;
+  --radius-sm: 8px;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter",
-    "Segoe UI", sans-serif;
+    "Segoe UI", "Ubuntu", sans-serif;
 }
 
 /* Light theme — follows the OS appearance automatically. */
 @media (prefers-color-scheme: light) {
   :root {
-    --bg: #ececec;
-    --bg-panel: #ececec;
-    --fill: rgba(0, 0, 0, 0.05);
-    --fill-hover: rgba(0, 0, 0, 0.08);
-    --fill-press: rgba(0, 0, 0, 0.12);
-    --line: rgba(0, 0, 0, 0.12);
-    --line-soft: rgba(0, 0, 0, 0.07);
+    --bg: #f6f6f8;
+    --bg-panel: #f6f6f8;
+    --fill: rgba(0, 0, 0, 0.045);
+    --fill-hover: rgba(0, 0, 0, 0.075);
+    --fill-press: rgba(0, 0, 0, 0.11);
+    --line: rgba(0, 0, 0, 0.1);
+    --line-soft: rgba(0, 0, 0, 0.06);
     --text: rgba(0, 0, 0, 0.88);
-    --text-dim: rgba(60, 60, 67, 0.75);
-    --muted: rgba(60, 60, 67, 0.55);
+    --text-dim: rgba(60, 60, 67, 0.72);
+    --muted: rgba(60, 60, 67, 0.5);
     --accent: #007aff;
-    --on-accent: #ffffff;
+    --accent-soft: rgba(0, 122, 255, 0.13);
     --green: #1faf4e;
-    --popover: #f5f5f5;
+    --popover: #ffffff;
   }
 }
 
 /* macOS: nearly transparent surfaces over the native vibrancy material —
    the system draws the widget glass, CSS only tints it. */
 body.mac {
-  --bg: rgba(30, 30, 32, 0.16);
-  --bg-panel: rgba(30, 30, 32, 0.55);
+  --bg: rgba(28, 28, 32, 0.18);
+  --bg-panel: rgba(28, 28, 32, 0.55);
   --popover: rgba(43, 43, 45, 0.7);
 }
 @media (prefers-color-scheme: light) {
@@ -119,74 +127,100 @@ body {
   flex-direction: column;
   height: 100vh;
   background: var(--bg);
-  border-radius: 16px;
+  border-radius: var(--radius-win);
   overflow: hidden;
 }
 
-/* Header — flat, like a widget title row */
-.header {
+/* ───────────────────────── Search row ─────────────────────────
+   The hero: no framed box, the whole row is the field. The magnifier marks
+   where typing goes, the buttons sit at the far end out of the way. */
+.searchbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 10px 14px 8px;
+  gap: 9px;
+  height: 46px;
+  flex: none;
+  padding: 0 8px 0 13px;
+  border-bottom: 1px solid var(--line-soft);
 }
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-weight: 600;
-}
-.logo {
+.search-icon {
   display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  flex: none;
   color: var(--muted);
-  font-size: 14px;
-  font-weight: 600;
+  transition: color 0.15s ease;
 }
-.title {
-  font-size: 13px;
+.search-icon svg {
+  width: 15px;
+  height: 15px;
+}
+/* Typing lights the magnifier up — the only cue the field needs. */
+.searchbar:focus-within .search-icon {
+  color: var(--text-dim);
+}
+.searchbar .search {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: 14.5px;
   color: var(--text);
+  caret-color: var(--accent);
 }
-.header-actions {
+.searchbar .search::placeholder {
+  color: var(--muted);
+}
+/* The plain-field rules further down also match this input; the row's own
+   look has to win when the caret is in it (which is nearly always). */
+.searchbar .search:focus {
+  background: transparent;
+}
+.bar-actions {
   display: flex;
-  gap: 2px;
+  flex: none;
+  gap: 1px;
 }
 
 /* Buttons */
 .icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
   border: none;
   color: var(--muted);
-  font-size: 17px;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background 0.12s ease, color 0.12s ease;
+}
+.icon-btn svg {
+  width: 15px;
+  height: 15px;
 }
 .icon-btn:hover {
   background: var(--fill-hover);
   color: var(--text);
 }
+.icon-btn:active {
+  background: var(--fill-press);
+}
 .icon-btn:disabled {
-  opacity: 0.4;
+  opacity: 0.35;
   cursor: default;
+  background: transparent;
 }
 
-.toolbar {
-  display: flex;
-  gap: 8px;
-  padding: 0 12px 9px;
-}
+/* Plain text field (settings, base-branch input). The search row overrides
+   this for its own borderless variant above. */
 .search {
-  flex: 1;
   background: var(--fill);
   border: none;
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
   color: var(--text);
-  padding: 8px 11px;
-  font-size: 13px;
+  padding: 7px 10px;
+  font-size: 12.5px;
   outline: none;
   transition: background 0.12s ease;
 }
@@ -196,30 +230,12 @@ body {
 .search:focus {
   background: var(--fill-hover);
 }
-.add-btn {
-  background: var(--fill);
-  color: var(--text);
-  border: none;
-  border-radius: 9px;
-  width: 34px;
-  font-size: 17px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.12s ease;
-}
-.add-btn:hover {
-  background: var(--fill-hover);
-}
-.add-btn:active {
-  background: var(--fill-press);
-}
 
-/* Content / tree */
+/* ───────────────────────── List ───────────────────────── */
 .content {
   flex: 1;
   overflow-y: auto;
-  padding: 2px 8px 10px;
-  border-top: 1px solid var(--line-soft);
+  padding: 6px 7px 8px;
 }
 .content::-webkit-scrollbar {
   width: 7px;
@@ -234,18 +250,18 @@ body {
    uncover the pinned `scroll` layers only while more list remains. */
 body:not(.mac) .content {
   background:
-    linear-gradient(var(--bg) 30%, rgba(0, 0, 0, 0)) top / 100% 22px no-repeat
+    linear-gradient(var(--bg) 30%, rgba(0, 0, 0, 0)) top / 100% 20px no-repeat
       local,
-    linear-gradient(rgba(0, 0, 0, 0), var(--bg) 70%) bottom / 100% 22px
+    linear-gradient(rgba(0, 0, 0, 0), var(--bg) 70%) bottom / 100% 20px
       no-repeat local,
-    radial-gradient(farthest-side at 50% 0, rgba(0, 0, 0, 0.34), rgba(0, 0, 0, 0))
-      top / 100% 10px no-repeat scroll,
+    radial-gradient(farthest-side at 50% 0, rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0))
+      top / 100% 9px no-repeat scroll,
     radial-gradient(
         farthest-side at 50% 100%,
-        rgba(0, 0, 0, 0.34),
+        rgba(0, 0, 0, 0.3),
         rgba(0, 0, 0, 0)
       )
-      bottom / 100% 10px no-repeat scroll;
+      bottom / 100% 9px no-repeat scroll;
 }
 /* WebKitGTK paints a permanent chunky scrollbar where macOS uses an overlay
    one. Inset it behind a transparent border so it floats instead. */
@@ -256,43 +272,51 @@ body:not(.mac) .content::-webkit-scrollbar-track {
   background: transparent;
 }
 body:not(.mac) .content::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.13);
   background-clip: padding-box;
   border: 3px solid transparent;
   border-radius: 7px;
 }
 body:not(.mac) .content:hover::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.26);
   background-clip: padding-box;
 }
 @media (prefers-color-scheme: light) {
   body:not(.mac) .content::-webkit-scrollbar-thumb {
-    background: rgba(0, 0, 0, 0.18);
+    background: rgba(0, 0, 0, 0.16);
     background-clip: padding-box;
   }
   body:not(.mac) .content:hover::-webkit-scrollbar-thumb {
-    background: rgba(0, 0, 0, 0.3);
+    background: rgba(0, 0, 0, 0.28);
     background-clip: padding-box;
   }
 }
 
+/* Section header (Pinned / Recent / a workspace) — a quiet label, not a row:
+   small caps, wide tracking, no fill of its own until hovered. */
 .ws {
-  margin-bottom: 4px;
+  margin-bottom: 3px;
+}
+.ws + .ws {
+  margin-top: 5px;
 }
 .ws-head {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
+  gap: 5px;
+  padding: 4px 7px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
-  transition: background 0.12s ease;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  transition: background 0.12s ease, color 0.12s ease;
 }
 .ws-head:hover {
   background: var(--fill);
+  color: var(--text-dim);
 }
 .ws-head .ws-name {
   flex: 1;
@@ -302,17 +326,20 @@ body:not(.mac) .content:hover::-webkit-scrollbar-thumb {
 }
 .ws-head .count {
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 500;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
 }
 .ws-remove {
   opacity: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
+  letter-spacing: 0;
   transition: opacity 0.12s ease;
 }
 .ws-head:hover .ws-remove {
-  opacity: 0.8;
+  opacity: 0.75;
 }
 .ws-remove:hover {
   opacity: 1;
@@ -327,8 +354,9 @@ body:not(.mac) .content:hover::-webkit-scrollbar-thumb {
 .row {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 5px 8px;
+  gap: 8px;
+  min-height: 29px;
+  padding: 4px 8px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   white-space: nowrap;
@@ -337,29 +365,33 @@ body:not(.mac) .content:hover::-webkit-scrollbar-thumb {
 .row:hover {
   background: var(--fill);
 }
-/* Keyboard selection — like a highlighted native menu item. */
+/* Keyboard selection. A tinted fill plus an accent edge marks the row without
+   painting over it — the name, the badge and the "open now" dot all stay
+   readable, which a solid accent bar cannot manage. */
 .row.selected {
-  background: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--accent);
 }
-.row.selected .label,
-.row.selected .twisty,
-.row.selected .chip,
-.row.selected .meta,
-.row.selected .badge,
-.row.selected .row-act {
-  color: var(--on-accent);
+.row.selected .label {
+  color: var(--text);
+  font-weight: 500;
 }
 .row .twisty {
-  width: 11px;
+  width: 9px;
   color: var(--muted);
-  font-size: 8px;
+  font-size: 7px;
   flex-shrink: 0;
   text-align: center;
 }
+/* A leaf has no arrow — and no reason to reserve its width either, which in
+   a 380px window is the difference between a name fitting and being cut. */
+.row .twisty:empty {
+  display: none;
+}
 .chip {
   flex-shrink: 0;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -379,6 +411,7 @@ body:not(.mac) .content:hover::-webkit-scrollbar-thumb {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-size: 13px;
 }
 .row.repo .label {
   color: var(--text);
@@ -389,13 +422,13 @@ body:not(.mac) .content:hover::-webkit-scrollbar-thumb {
 .row .badge {
   display: none;
   flex-shrink: 0;
-  font-size: 10.5px;
+  font-size: 10px;
   color: var(--text-dim);
   background: var(--fill);
   border: none;
-  border-radius: 6px;
-  padding: 2.5px 8px;
-  max-width: 96px;
+  border-radius: 5px;
+  padding: 2px 7px;
+  max-width: 92px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -414,7 +447,7 @@ body:not(.mac) .content:hover::-webkit-scrollbar-thumb {
 /* Per-project info (open now / last seen) */
 .meta {
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: 10.5px;
   white-space: nowrap;
 }
 .open-now {
@@ -423,15 +456,19 @@ body:not(.mac) .content:hover::-webkit-scrollbar-thumb {
 }
 .last-seen {
   color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 .row.repo:hover .meta {
   display: none;
 }
 
+/* Nesting: one small step per level. In a 380px window every pixel of indent
+   is a pixel the project name does not get, so the step is the smallest one
+   that still reads as "inside", and the guide line carries the rest. */
 .children {
-  margin-left: 13px;
+  margin-left: 11px;
   border-left: 1px solid var(--line-soft);
-  padding-left: 3px;
+  padding-left: 2px;
 }
 .collapsed > .children {
   display: none;
@@ -440,31 +477,69 @@ body:not(.mac) .content:hover::-webkit-scrollbar-thumb {
 .empty {
   text-align: center;
   color: var(--muted);
-  padding: 44px 22px;
+  padding: 46px 24px;
   line-height: 1.7;
 }
 .empty button {
   margin-top: 14px;
 }
 
-/* Footer — a transient status toast, hidden when empty */
+/* ───────────────────────── Key-hint bar ─────────────────────────
+   Always up, so the shortcuts are learnable without a manual; a status
+   message takes the row over for the couple of seconds it is showing. */
 .footer {
-  display: none;
-  justify-content: center;
-  align-items: center;
-  padding: 8px 14px;
-  border-top: 1px solid var(--line-soft);
-  font-size: 11px;
-}
-.footer.visible {
   display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  height: 28px;
+  padding: 0 11px;
+  border-top: 1px solid var(--line-soft);
+  font-size: 10.5px;
+  color: var(--muted);
+}
+.status {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-dim);
+}
+.hints {
+  display: flex;
+  gap: 11px;
+  margin-left: auto;
+}
+.footer.has-status .hints {
+  display: none;
+}
+.khint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.khint kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 4px;
+  background: var(--fill);
+  border: 1px solid var(--line-soft);
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 9.5px;
+  line-height: 1;
 }
 .muted {
   color: var(--muted);
 }
 
-/* Settings panel. The tree is hidden while it's open (body.settings-open) so
-   nothing shines through the translucent panel — only the window glass. */
+/* ───────────────────────── Settings panel ─────────────────────────
+   The tree is hidden while it's open (body.settings-open) so nothing shines
+   through the translucent panel — only the window glass. */
 body.settings-open .app {
   visibility: hidden;
 }
@@ -472,7 +547,7 @@ body.settings-open .app {
   position: absolute;
   inset: 0;
   background: var(--bg-panel);
-  border-radius: 16px;
+  border-radius: var(--radius-win);
   display: flex;
   flex-direction: column;
 }
@@ -482,8 +557,10 @@ body.settings-open .app {
 .panel-head {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 10px 14px;
+  gap: 6px;
+  height: 46px;
+  flex: none;
+  padding: 0 10px;
   border-bottom: 1px solid var(--line-soft);
   font-weight: 600;
 }
@@ -502,23 +579,27 @@ body.settings-open .app {
   padding: 6px 11px;
   font-size: 12px;
   cursor: pointer;
-  margin-left: 6px;
   transition: background 0.12s ease;
+}
+.ghost-btn + .ghost-btn {
+  margin-left: 6px;
 }
 .ghost-btn:hover {
   background: var(--fill-hover);
 }
+.ghost-btn:active {
+  background: var(--fill-press);
+}
 .ghost-btn.recording {
   color: var(--accent);
-  background: var(--fill-hover);
+  background: var(--accent-soft);
 }
 
 /* Selects */
 .select-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
+  gap: 8px;
 }
 .select {
   flex: 1;
@@ -545,7 +626,6 @@ body.settings-open .app {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-bottom: 12px;
 }
 .chip-branch {
   display: inline-flex;
@@ -578,7 +658,7 @@ body.settings-open .app {
   color: var(--muted);
   font-size: 11px;
   line-height: 1.55;
-  margin-top: 12px;
+  margin: 8px 2px 0;
 }
 .hint code {
   background: var(--fill);
@@ -590,7 +670,8 @@ body.settings-open .app {
    Sits between panel-head and panel-body. */
 .tab-bar {
   display: flex;
-  gap: 4px;
+  gap: 3px;
+  flex: none;
   padding: 8px 10px 2px;
 }
 .tab {
@@ -610,8 +691,8 @@ body.settings-open .app {
   transition: background 0.12s ease, color 0.12s ease;
 }
 .tab svg {
-  width: 19px;
-  height: 19px;
+  width: 18px;
+  height: 18px;
 }
 .tab:hover {
   color: var(--text-dim);
@@ -619,11 +700,11 @@ body.settings-open .app {
 }
 .tab.active {
   color: var(--text);
-  background: var(--fill);
+  background: var(--fill-hover);
 }
 
-/* Settings cards — macOS System-Settings idiom: a bold group title above a
-   bordered, translucent container of rows divided by soft lines. */
+/* Settings cards — the System-Settings idiom: a bold group title above a
+   bordered container of rows divided by soft lines. */
 .settings-group {
   margin-bottom: 18px;
 }
@@ -667,13 +748,38 @@ label.card-row {
   align-items: center;
   gap: 8px;
 }
+/* Switches. A bare checkbox reads as a web form; this panel is a settings
+   sheet, and the pill is the control people expect to find in one. */
 .card-row input[type="checkbox"] {
-  accent-color: var(--accent);
-  cursor: pointer;
-  width: 15px;
-  height: 15px;
+  -webkit-appearance: none;
+  appearance: none;
+  position: relative;
+  width: 34px;
+  height: 20px;
   flex: none;
   margin: 0;
+  border-radius: 10px;
+  background: var(--fill-press);
+  cursor: pointer;
+  transition: background 0.16s ease;
+}
+.card-row input[type="checkbox"]::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.32);
+  transition: transform 0.16s ease;
+}
+.card-row input[type="checkbox"]:checked {
+  background: var(--accent);
+}
+.card-row input[type="checkbox"]:checked::after {
+  transform: translateX(14px);
 }
 .card-row .select {
   min-width: 0;
@@ -683,10 +789,6 @@ label.card-row {
   flex-direction: column;
   align-items: stretch;
   gap: 8px;
-}
-.card-row--column .chips,
-.card-row--column .select-row {
-  margin-bottom: 0;
 }
 
 /* About: centered identity block (logo · name · version). */
@@ -720,7 +822,7 @@ label.card-row {
   -webkit-backdrop-filter: blur(24px) saturate(160%);
   backdrop-filter: blur(24px) saturate(160%);
   border: 1px solid var(--line-soft);
-  border-radius: 12px;
+  border-radius: 11px;
   padding: 5px;
   box-shadow: 0 10px 34px rgba(0, 0, 0, 0.4);
 }
@@ -734,6 +836,7 @@ label.card-row {
   padding: 6px 9px;
   border-radius: 7px;
   cursor: pointer;
+  font-size: 12.5px;
 }
 .ide-picker .pick:hover {
   background: var(--accent);
@@ -748,15 +851,15 @@ label.card-row {
   width: 10px;
 }
 
-/* Hover actions on repo rows (repo link, fast-start) */
+/* Hover actions on repo rows (pin, branch, MR, repo link) */
 .row .row-act {
   display: none;
   flex-shrink: 0;
-  width: 21px;
-  height: 21px;
+  width: 20px;
+  height: 20px;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
+  border-radius: 5px;
   color: var(--muted);
   cursor: pointer;
 }

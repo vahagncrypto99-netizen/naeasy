@@ -2,14 +2,15 @@
 
 export const $ = (sel) => document.querySelector(sel);
 
-// The footer is a transient status toast — visible only while a message is up.
+// The bottom bar carries the key hints; a status message takes the row over
+// for a couple of seconds, then the hints come back.
 export function setStatus(msg) {
   $("#status").textContent = msg || "";
-  $("#footer").classList.toggle("visible", !!msg);
+  $("#footer").classList.toggle("has-status", !!msg);
   if (msg) {
     setTimeout(() => {
       $("#status").textContent = "";
-      $("#footer").classList.remove("visible");
+      $("#footer").classList.remove("has-status");
     }, 2500);
   }
 }

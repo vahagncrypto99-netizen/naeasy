@@ -85,7 +85,7 @@ export function renderPrefs() {
   $("#max-pinned").value = s.max_pinned ?? 3;
 
   // Dragging only makes sense for a floating window.
-  document.querySelectorAll(".header, .header-left, .title").forEach((el) => {
+  document.querySelectorAll(".searchbar, .footer").forEach((el) => {
     if (s.window_float) el.setAttribute("data-tauri-drag-region", "");
     else el.removeAttribute("data-tauri-drag-region");
   });
