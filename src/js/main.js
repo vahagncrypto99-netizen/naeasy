@@ -157,6 +157,21 @@ const resetTransientUi = () => {
 api.onHidden(resetTransientUi);
 api.onShown(resetTransientUi);
 
+// A launcher types the moment it appears: every show puts the caret in the
+// filter box, so no click on the field is needed. DOM focus is set even
+// before the window manager hands the keyboard over — the keystrokes land in
+// the field as soon as it does — and the window-focus listener is the backstop
+// for a show that never emitted the event (single-instance relaunch, alt-tab).
+function focusSearch() {
+  if (!$("#settings").classList.contains("hidden")) return; // settings own the caret
+  if (!$("#fast-start").classList.contains("hidden")) return; // so does fast-start
+  const search = $("#search");
+  search.focus();
+  search.select();
+}
+api.onShown(focusSearch);
+window.addEventListener("focus", focusSearch);
+
 // Keep layout maps fresh: the backend pushes a new set when layouts change,
 // and we re-pull on every window show as a fallback for any missed event.
 api.onLayoutsChanged((e) => {
@@ -179,6 +194,7 @@ $("#rescan").addEventListener("click", () => {
       data = await api.detectIdes();
     }
     applyState(data);
+    focusSearch();
     initAutostart();
     refreshLayoutMaps();
     refreshOpenNow();

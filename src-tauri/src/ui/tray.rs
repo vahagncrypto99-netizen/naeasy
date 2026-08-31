@@ -96,6 +96,64 @@ fn position_main_under_tray(app: &tauri::AppHandle) {
     position_popover(&window, rect.as_ref(), win_w);
 }
 
+/// Ask the window manager for the keyboard, stamped with the current X server
+/// time so the request reads as user-initiated rather than a background app
+/// grabbing focus.
+#[cfg(not(target_os = "macos"))]
+fn present_with_server_time(gtk_window: &gtk::ApplicationWindow) {
+    use gtk::prelude::*;
+
+    let Some(gdk_window) = gtk_window.window() else {
+        return;
+    };
+    let Ok(x11) = gdk_window.downcast::<gdkx11::X11Window>() else {
+        return; // Wayland — nothing to time-stamp, the plain request is all we have.
+    };
+    let time = gdkx11::functions::x11_get_server_time(&x11);
+    x11.set_user_time(time);
+    gtk_window.present_with_time(time);
+}
+
+/// Take the keyboard every time the popover appears.
+///
+/// `show()` only queues the map — tao posts a request onto the main-loop
+/// channel and returns — so a focus request issued right after it names a
+/// window that is still unmapped, and a window manager drops those on the
+/// floor. Measured on GNOME: asking straight after `show()` won the keyboard
+/// in none of six tries, asking once the window was up won it in all five.
+/// The `map` signal fires after `gdk_window_show()` has put the map on the
+/// wire, so the request that follows is guaranteed to reach the window manager
+/// behind it. Hooked once, for the window's lifetime.
+#[cfg(not(target_os = "macos"))]
+pub fn arm_focus_on_map(app: &tauri::AppHandle) {
+    use gtk::prelude::*;
+
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    let Ok(gtk_window) = window.gtk_window() else {
+        return;
+    };
+    gtk_window.connect_map(present_with_server_time);
+}
+
+/// Focus a popover that a show found already on screen — no map fires for it,
+/// so `arm_focus_on_map` never gets a turn.
+#[cfg(not(target_os = "macos"))]
+fn focus_popover(window: &tauri::WebviewWindow) {
+    let _ = window.set_focus();
+    if let Ok(gtk_window) = window.gtk_window() {
+        present_with_server_time(&gtk_window);
+    }
+}
+
+/// The panel path takes key focus on its own; this is only reached when the
+/// window never became one.
+#[cfg(target_os = "macos")]
+fn focus_popover(window: &tauri::WebviewWindow) {
+    let _ = window.set_focus();
+}
+
 /// Hide the main window (panel-aware). The single hide path for every
 /// trigger — hotkey toggle, tray click, auto-hide, frontend, close button.
 /// Also the debounce point for persisting remembered window geometry.
@@ -148,7 +206,7 @@ pub fn toggle_main(app: &tauri::AppHandle) {
             let _ = w.set_always_on_top(true);
             let _ = w.unminimize();
             let _ = w.show();
-            let _ = w.set_focus();
+            focus_popover(&w);
             emit_shown(app);
         }
     }
@@ -173,7 +231,7 @@ pub fn show_main(app: &tauri::AppHandle) {
         let _ = w.set_always_on_top(true);
         let _ = w.show();
         let _ = w.unminimize();
-        let _ = w.set_focus();
+        focus_popover(&w);
         emit_shown(app);
     }
 }

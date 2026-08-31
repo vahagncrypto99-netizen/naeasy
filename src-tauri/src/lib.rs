@@ -195,6 +195,10 @@ pub fn run() {
             // Restore the configured geometry (size mode, float position).
             ui::tray::apply_window_geometry(app.handle());
 
+            // Take the keyboard every time the popover appears.
+            #[cfg(not(target_os = "macos"))]
+            ui::tray::arm_focus_on_map(app.handle());
+
             // Show the window on first launch so the app is visibly "there".
             log::info!("showing main window on launch");
             ui::tray::show_main(app.handle());

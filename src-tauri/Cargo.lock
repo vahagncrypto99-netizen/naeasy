@@ -2319,6 +2319,8 @@ version = "1.4.0"
 dependencies = [
  "core-foundation",
  "core-foundation-sys",
+ "gdkx11",
+ "gtk",
  "log",
  "objc2",
  "objc2-app-kit",
